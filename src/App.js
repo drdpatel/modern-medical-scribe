@@ -170,7 +170,7 @@ function App() {
       recognizerRef.current.startContinuousRecognitionAsync(
         () => {
           setIsRecording(true);
-          setStatus('🔴 Recording... Speak now');
+          setStatus('Recording... Speak now');
         },
         (error) => {
           console.error('Recognition start error:', error);
@@ -233,7 +233,7 @@ function App() {
     }
 
     setIsProcessing(true);
-    setStatus('🤖 AI generating medical notes...');
+    setStatus('AI generating medical notes...');
 
     try {
       let patientContext = '';
@@ -358,7 +358,7 @@ Please convert this into structured medical notes.`
     <div className="sidebar">
       <div className="sidebar-header">
         <h1 className="sidebar-title">
-          🏥 <span>Medical Scribe AI</span>
+          <span>Aayu AI Scribe</span>
         </h1>
       </div>
       
@@ -367,21 +367,21 @@ Please convert this into structured medical notes.`
           className={`nav-button ${activeTab === 'patients' ? 'active' : ''}`}
           onClick={() => setActiveTab('patients')}
         >
-          <span>👥</span> Patients
+          Patients
         </button>
         
         <button 
           className={`nav-button ${activeTab === 'recording' ? 'active' : ''}`}
           onClick={() => setActiveTab('recording')}
         >
-          <span>🎙️</span> Recording
+          Recording
         </button>
         
         <button 
           className={`nav-button ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}
         >
-          <span>⚙️</span> Settings
+          Settings
         </button>
       </nav>
       
@@ -401,7 +401,7 @@ Please convert this into structured medical notes.`
           className="btn btn-primary"
           onClick={() => setShowPatientModal(true)}
         >
-          ➕ Add New Patient
+          Add New Patient
         </button>
       </div>
 
@@ -547,7 +547,7 @@ Please convert this into structured medical notes.`
                 onClick={startRecording}
                 disabled={isRecording}
               >
-                {isRecording ? '🔴 Recording...' : '🎤 Start Recording'}
+                {isRecording ? 'Recording...' : 'Start Recording'}
               </button>
               
               <button 
@@ -555,7 +555,7 @@ Please convert this into structured medical notes.`
                 onClick={stopRecording}
                 disabled={!isRecording}
               >
-                ⏹️ Stop Recording
+                Stop Recording
               </button>
               
               <button 
@@ -563,7 +563,7 @@ Please convert this into structured medical notes.`
                 onClick={generateNotes}
                 disabled={!transcript || isProcessing}
               >
-                {isProcessing ? '⏳ Generating...' : '📝 Generate Notes'}
+                {isProcessing ? 'Generating...' : 'Generate Notes'}
               </button>
               
               <button 
@@ -571,14 +571,14 @@ Please convert this into structured medical notes.`
                 onClick={saveVisit}
                 disabled={!medicalNotes}
               >
-                💾 Save Visit
+                Save Visit
               </button>
 
               <button 
                 className="btn btn-secondary"
                 onClick={clearSession}
               >
-                🗑️ Clear Session
+                Clear Session
               </button>
             </div>
 
@@ -707,7 +707,7 @@ Please convert this into structured medical notes.`
                 onChange={(e) => setShowApiKeys(e.target.checked)}
                 style={{marginRight: '8px'}}
               />
-              👁️ Show API Keys
+              Show API Keys
             </label>
           </div>
 
@@ -715,7 +715,7 @@ Please convert this into structured medical notes.`
             className="btn btn-success"
             onClick={() => saveApiSettings(apiSettings)}
           >
-            💾 Save Settings
+            Save Settings
           </button>
         </div>
       </div>
@@ -742,7 +742,7 @@ Please convert this into structured medical notes.`
                 <p className="modal-subtitle">Enter patient information</p>
               </div>
               <button className="modal-close" onClick={() => setShowPatientModal(false)}>
-                ✕
+                Close
               </button>
             </div>
 
@@ -820,7 +820,7 @@ Please convert this into structured medical notes.`
                 <p className="modal-subtitle">{selectedVisit.date} at {selectedVisit.time}</p>
               </div>
               <button className="modal-close" onClick={() => setShowVisitModal(false)}>
-                ✕
+                Close
               </button>
             </div>
 
