@@ -15,7 +15,7 @@ function App() {
     username: '', password: '', confirmPassword: '', name: '', role: 'medical_provider'
   });
 
-  const [activeTab, setActiveTab] = useState('patients');
+  const [activeTab, setActiveTab] = useState('scribe');
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,6 +28,7 @@ function App() {
   });
 
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
@@ -178,11 +179,6 @@ function App() {
       return;
     }
 
-    if (!selectedPatient) {
-      setStatus('Please select a patient first');
-      return;
-    }
-
     const speechKey = apiSettings.speechKey;
     const speechRegion = apiSettings.speechRegion;
     
@@ -223,16 +219,19 @@ function App() {
 
       recognizerRef.current.sessionStopped = () => {
         setIsRecording(false);
+        setIsPaused(false);
         setStatus('Recording session ended');
       };
 
       recognizerRef.current.startContinuousRecognitionAsync(
         () => {
           setIsRecording(true);
+          setIsPaused(false);
           setStatus('Recording... Speak now');
         },
         (error) => {
           setIsRecording(false);
+          setIsPaused(false);
           if (error.toString().includes('1006')) {
             setStatus('Invalid Speech key. Check your Azure Speech Service key.');
           } else if (error.toString().includes('1007')) {
@@ -248,16 +247,69 @@ function App() {
     }
   };
 
+  const pauseRecording = () => {
+    if (recognizerRef.current && isRecording && !isPaused) {
+      recognizerRef.current.stopContinuousRecognitionAsync(
+        () => {
+          setIsPaused(true);
+          setInterimTranscript('');
+          setStatus('Recording paused');
+        },
+        (error) => {
+          setStatus('Pause failed');
+        }
+      );
+    }
+  };
+
+  const resumeRecording = async () => {
+    if (isPaused) {
+      const speechKey = apiSettings.speechKey;
+      const speechRegion = apiSettings.speechRegion;
+      
+      const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
+      speechConfig.speechRecognitionLanguage = 'en-US';
+      
+      audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+      recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
+
+      recognizerRef.current.recognizing = (s, e) => {
+        if (e.result.text) {
+          setInterimTranscript(e.result.text);
+        }
+      };
+
+      recognizerRef.current.recognized = (s, e) => {
+        if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text.trim()) {
+          setTranscript(prev => prev + (prev ? ' ' : '') + e.result.text.trim());
+          setInterimTranscript('');
+        }
+      };
+
+      recognizerRef.current.startContinuousRecognitionAsync(
+        () => {
+          setIsPaused(false);
+          setStatus('Recording resumed... Speak now');
+        },
+        (error) => {
+          setStatus('Resume failed');
+        }
+      );
+    }
+  };
+
   const stopRecording = () => {
     if (recognizerRef.current) {
       recognizerRef.current.stopContinuousRecognitionAsync(
         () => {
           setIsRecording(false);
+          setIsPaused(false);
           setInterimTranscript('');
           setStatus('Recording complete');
         },
         (error) => {
           setIsRecording(false);
+          setIsPaused(false);
           setInterimTranscript('');
           setStatus('Recording stopped with error');
         }
@@ -265,6 +317,7 @@ function App() {
       recognizerRef.current = null;
     } else {
       setIsRecording(false);
+      setIsPaused(false);
       setInterimTranscript('');
       setStatus('Recording complete');
     }
@@ -307,6 +360,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
   `${visit.date} (${visit.time}): ${visit.notes.substring(0, 200)}...`
 ).join('\n')}
 `;
+      } else {
+        patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
       }
 
       const systemPrompt = `You are a medical scribe assistant. Create professional medical notes including Chief Complaint, History of Present Illness, Assessment, and Plan sections. Use appropriate medical terminology and maintain professional format.`;
@@ -330,7 +385,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       );
 
       setMedicalNotes(response.data.choices[0].message.content);
-      setStatus('Medical notes generated successfully');
+      setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
       
     } catch (error) {
       if (error.response?.status === 401) {
@@ -348,8 +403,13 @@ ${selectedPatient.visits.slice(-3).map(visit =>
   };
 
   const saveVisit = () => {
-    if (!selectedPatient || !medicalNotes) {
-      setStatus('Cannot save - missing patient or notes');
+    if (!medicalNotes) {
+      setStatus('Cannot save - no notes generated');
+      return;
+    }
+
+    if (!selectedPatient) {
+      setStatus('Please select a patient before saving');
       return;
     }
 
@@ -380,6 +440,12 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       }
       
       setStatus('Visit saved successfully');
+      
+      // Clear the session after saving
+      setTranscript('');
+      setInterimTranscript('');
+      setMedicalNotes('');
+      setStatus('Visit saved - Ready for next patient');
     } catch (error) {
       setStatus('Failed to save visit: ' + error.message);
     }
@@ -398,13 +464,6 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
     const index = (patient.firstName.charCodeAt(0) + patient.lastName.charCodeAt(0)) % colors.length;
     return colors[index];
-  };
-
-  const clearSession = () => {
-    setTranscript('');
-    setInterimTranscript('');
-    setMedicalNotes('');
-    setStatus('Session cleared - Ready to record');
   };
 
   if (isLoading) {
@@ -445,15 +504,15 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         </button>
         
         <button 
-          className={`nav-button ${activeTab === 'recording' ? 'active' : ''}`}
-          onClick={() => setActiveTab('recording')}
+          className={`nav-button ${activeTab === 'scribe' ? 'active' : ''}`}
+          onClick={() => setActiveTab('scribe')}
           disabled={!authService.hasPermission('scribe')}
           style={{
             opacity: !authService.hasPermission('scribe') ? 0.5 : 1,
             cursor: !authService.hasPermission('scribe') ? 'not-allowed' : 'pointer'
           }}
         >
-          Recording
+          Scribe
         </button>
         
         <button 
@@ -820,7 +879,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         {currentUser && (
           <>
             {activeTab === 'patients' && renderPatientsPage()}
-            {activeTab === 'recording' && renderRecordingPage()}
+            {activeTab === 'scribe' && renderScribePage()}
             {activeTab === 'settings' && renderSettingsPage()}
             {activeTab === 'users' && authService.hasPermission('add_users') && renderUsersPage()}
           </>
