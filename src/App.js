@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
 import './App.css';
 
 function App() {
+  // Authentication states
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -15,6 +16,7 @@ function App() {
     username: '', password: '', confirmPassword: '', name: '', role: 'medical_provider'
   });
 
+  // Navigation and patient states
   const [activeTab, setActiveTab] = useState('scribe');
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -23,10 +25,12 @@ function App() {
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   
+  // New patient form state
   const [newPatient, setNewPatient] = useState({
     firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: ''
   });
 
+  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -35,16 +39,23 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('Please log in to continue');
 
+  // API settings states
   const [apiSettings, setApiSettings] = useState({
-    speechKey: '', speechRegion: 'eastus', openaiEndpoint: '', openaiKey: '', 
-    openaiDeployment: 'gpt-4', openaiApiVersion: '2024-08-01-preview'
+    speechKey: '', 
+    speechRegion: 'eastus', 
+    openaiEndpoint: '', 
+    openaiKey: '', 
+    openaiDeployment: 'gpt-4', 
+    openaiApiVersion: '2024-08-01-preview'
   });
   const [showApiKeys, setShowApiKeys] = useState(false);
 
+  // Speech recognition refs
   const recognizerRef = useRef(null);
   const audioConfigRef = useRef(null);
 
-  const loadPatientsFromLocalStorage = () => {
+  // Load patients from localStorage
+  const loadPatientsFromLocalStorage = useCallback(() => {
     try {
       const patientsData = authService.getPatients();
       const patientsWithVisits = patientsData.map(patient => {
@@ -53,10 +64,17 @@ function App() {
       });
       setPatients(patientsWithVisits);
     } catch (error) {
+      console.error('Failed to load patients:', error);
       setPatients([]);
     }
-  };
+  }, []);
 
+  // Reload patients helper
+  const reloadPatients = useCallback(() => {
+    loadPatientsFromLocalStorage();
+  }, [loadPatientsFromLocalStorage]);
+
+  // Initialize app
   useEffect(() => {
     const initializeApp = () => {
       setIsLoading(true);
@@ -75,6 +93,7 @@ function App() {
           setApiSettings(JSON.parse(savedApiSettings));
         }
       } catch (error) {
+        console.error('App initialization error:', error);
         setShowLoginModal(true);
       } finally {
         setIsLoading(false);
@@ -82,13 +101,10 @@ function App() {
     };
 
     initializeApp();
-  }, []);
+  }, [loadPatientsFromLocalStorage]);
 
-  const reloadPatients = () => {
-    loadPatientsFromLocalStorage();
-  };
-
-  const handleLogin = (e) => {
+  // Authentication handlers
+  const handleLogin = useCallback((e) => {
     e.preventDefault();
     setLoginError('');
     
@@ -102,9 +118,9 @@ function App() {
     } catch (error) {
       setLoginError(error.message);
     }
-  };
+  }, [loginForm, loadPatientsFromLocalStorage]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     authService.logout();
     setCurrentUser(null);
     setPatients([]);
@@ -113,9 +129,9 @@ function App() {
     setMedicalNotes('');
     setStatus('Please log in to continue');
     setShowLoginModal(true);
-  };
+  }, []);
 
-  const handleCreateUser = (e) => {
+  const handleCreateUser = useCallback((e) => {
     e.preventDefault();
     
     if (newUser.password !== newUser.confirmPassword) {
@@ -131,9 +147,10 @@ function App() {
     } catch (error) {
       alert('Failed to create user: ' + error.message);
     }
-  };
+  }, [newUser]);
 
-  const saveApiSettings = (settings) => {
+  // API settings handler
+  const saveApiSettings = useCallback((settings) => {
     setApiSettings(settings);
     try {
       localStorage.setItem('medicalScribeApiSettings', JSON.stringify(settings));
@@ -141,11 +158,12 @@ function App() {
         setStatus('API settings saved - Ready to begin');
       }
     } catch (error) {
-      console.warn('Cannot save API settings');
+      console.warn('Cannot save API settings:', error);
     }
-  };
+  }, []);
 
-  const addPatient = () => {
+  // Patient management
+  const addPatient = useCallback(() => {
     if (!authService.hasPermission('add_patients')) {
       alert('You do not have permission to add patients');
       return;
@@ -171,9 +189,10 @@ function App() {
     } catch (error) {
       alert('Failed to save patient: ' + error.message);
     }
-  };
+  }, [newPatient, reloadPatients]);
 
-  const startRecording = async () => {
+  // Recording functions
+  const startRecording = useCallback(async () => {
     if (!authService.hasPermission('scribe')) {
       setStatus('You do not have permission to record');
       return;
@@ -245,9 +264,9 @@ function App() {
     } catch (error) {
       setStatus(`Setup failed: ${error.message}`);
     }
-  };
+  }, [apiSettings.speechKey, apiSettings.speechRegion]);
 
-  const pauseRecording = () => {
+  const pauseRecording = useCallback(() => {
     if (recognizerRef.current && isRecording && !isPaused) {
       recognizerRef.current.stopContinuousRecognitionAsync(
         () => {
@@ -256,13 +275,14 @@ function App() {
           setStatus('Recording paused');
         },
         (error) => {
+          console.error('Pause failed:', error);
           setStatus('Pause failed');
         }
       );
     }
-  };
+  }, [isRecording, isPaused]);
 
-  const resumeRecording = async () => {
+  const resumeRecording = useCallback(async () => {
     if (isPaused) {
       const speechKey = apiSettings.speechKey;
       const speechRegion = apiSettings.speechRegion;
@@ -292,13 +312,14 @@ function App() {
           setStatus('Recording resumed... Speak now');
         },
         (error) => {
+          console.error('Resume failed:', error);
           setStatus('Resume failed');
         }
       );
     }
-  };
+  }, [isPaused, apiSettings.speechKey, apiSettings.speechRegion]);
 
-  const stopRecording = () => {
+  const stopRecording = useCallback(() => {
     if (recognizerRef.current) {
       recognizerRef.current.stopContinuousRecognitionAsync(
         () => {
@@ -308,6 +329,7 @@ function App() {
           setStatus('Recording complete');
         },
         (error) => {
+          console.error('Stop recording error:', error);
           setIsRecording(false);
           setIsPaused(false);
           setInterimTranscript('');
@@ -321,9 +343,10 @@ function App() {
       setInterimTranscript('');
       setStatus('Recording complete');
     }
-  };
+  }, []);
 
-  const generateNotes = async () => {
+  // AI note generation
+  const generateNotes = useCallback(async () => {
     if (!authService.hasPermission('scribe')) {
       setStatus('You do not have permission to generate notes');
       return;
@@ -388,6 +411,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
       
     } catch (error) {
+      console.error('AI generation error:', error);
       if (error.response?.status === 401) {
         setStatus('OpenAI authentication failed. Check your API key.');
       } else if (error.response?.status === 404) {
@@ -400,9 +424,10 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [transcript, selectedPatient, apiSettings]);
 
-  const saveVisit = () => {
+  // Save visit
+  const saveVisit = useCallback(() => {
     if (!medicalNotes) {
       setStatus('Cannot save - no notes generated');
       return;
@@ -447,31 +472,45 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       setMedicalNotes('');
       setStatus('Visit saved - Ready for next patient');
     } catch (error) {
+      console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + error.message);
     }
-  };
+  }, [medicalNotes, selectedPatient, transcript, currentUser, patients, reloadPatients]);
 
+  // Utility functions
   const filteredPatients = patients.filter(patient =>
     `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.dateOfBirth.includes(searchTerm)
   );
 
-  const getPatientInitials = (patient) => {
+  const getPatientInitials = useCallback((patient) => {
     return (patient.firstName[0] + patient.lastName[0]).toUpperCase();
-  };
+  }, []);
 
-  const getAvatarColor = (patient) => {
+  const getAvatarColor = useCallback((patient) => {
     const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
     const index = (patient.firstName.charCodeAt(0) + patient.lastName.charCodeAt(0)) % colors.length;
     return colors[index];
-  };
+  }, []);
 
+  // Handle patient selection
+  const handlePatientSelect = useCallback((patientId) => {
+    const patient = patients.find(p => p.id === parseInt(patientId));
+    setSelectedPatient(patient || null);
+  }, [patients]);
+
+  // Loading screen
   if (isLoading) {
     return (
       <div className="app-container">
         <div style={{ 
-          display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh',
-          backgroundColor: 'var(--aayu-light-gray)', fontSize: '18px', color: 'var(--aayu-navy)'
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          backgroundColor: 'var(--aayu-light-gray)', 
+          fontSize: '18px', 
+          color: 'var(--aayu-navy)'
         }}>
           Loading Aayu AI Scribe...
         </div>
@@ -479,15 +518,22 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     );
   }
 
+  // Sidebar component
   const renderSidebar = () => (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h1 className="sidebar-title"><span>Aayu AI Scribe</span></h1>
+        <h1 className="sidebar-title">
+          <span>Aayu AI Scribe</span>
+        </h1>
         {currentUser && (
           <div style={{ 
-            marginTop: '12px', fontSize: '14px', color: 'rgba(255,255,255,0.8)', textAlign: 'center'
+            marginTop: '12px', 
+            fontSize: '14px', 
+            color: 'rgba(255,255,255,0.8)', 
+            textAlign: 'center'
           }}>
-            {currentUser.name}<br />
+            {currentUser.name}
+            <br />
             <span style={{ fontSize: '12px', color: 'var(--aayu-lime)' }}>
               {currentUser.role.replace('_', ' ').toUpperCase()}
             </span>
@@ -496,13 +542,6 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       </div>
       
       <nav className="sidebar-nav">
-        <button 
-          className={`nav-button ${activeTab === 'patients' ? 'active' : ''}`}
-          onClick={() => setActiveTab('patients')}
-        >
-          Patients
-        </button>
-        
         <button 
           className={`nav-button ${activeTab === 'scribe' ? 'active' : ''}`}
           onClick={() => setActiveTab('scribe')}
@@ -513,6 +552,13 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           }}
         >
           Scribe
+        </button>
+
+        <button 
+          className={`nav-button ${activeTab === 'patients' ? 'active' : ''}`}
+          onClick={() => setActiveTab('patients')}
+        >
+          Patients
         </button>
         
         <button 
@@ -541,12 +587,213 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       </nav>
       
       <div className="sidebar-footer">
-        Medical Scribe AI v2.2<br />
+        Medical Scribe AI v2.2
+        <br />
         Secure • Simplified
       </div>
     </div>
   );
 
+  // Scribe page component
+  const renderScribePage = () => {
+    if (!authService.hasPermission('scribe')) {
+      return (
+        <div className="content-container">
+          <div className="page-header">
+            <h2 className="page-title">Medical Scribe</h2>
+          </div>
+          <div className="card">
+            <h3 className="card-title">Access Denied</h3>
+            <p>You do not have permission to access the scribe functionality. Contact your administrator if you need access.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="content-container">
+        <div className="page-header">
+          <h2 className="page-title">Medical Scribe</h2>
+        </div>
+
+        {/* Patient Selection Section */}
+        <div className="card">
+          <h3 className="card-title">Patient Selection</h3>
+          
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <select 
+                className="form-input"
+                value={selectedPatient?.id || ''}
+                onChange={(e) => handlePatientSelect(e.target.value)}
+                style={{ marginBottom: 0 }}
+              >
+                <option value="">Select a patient...</option>
+                {patients.map(patient => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.firstName} {patient.lastName} - DOB: {patient.dateOfBirth}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {authService.hasPermission('add_patients') && (
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowPatientModal(true)}
+                style={{ minWidth: 'auto', padding: '16px 24px' }}
+              >
+                Add New Patient
+              </button>
+            )}
+          </div>
+
+          {selectedPatient && (
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: 'var(--aayu-pale-lime)', 
+              borderRadius: '8px',
+              border: '2px solid var(--aayu-lime)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <div 
+                  className="patient-avatar"
+                  style={{ 
+                    backgroundColor: getAvatarColor(selectedPatient),
+                    width: '40px',
+                    height: '40px',
+                    fontSize: '16px'
+                  }}
+                >
+                  {getPatientInitials(selectedPatient)}
+                </div>
+                <div>
+                  <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+                  <div style={{ fontSize: '14px', color: 'var(--aayu-gray)' }}>
+                    DOB: {selectedPatient.dateOfBirth} | Visits: {selectedPatient.visits.length}
+                  </div>
+                </div>
+              </div>
+              
+              {(selectedPatient.medicalHistory || selectedPatient.medications) && (
+                <div style={{ fontSize: '14px', marginTop: '8px' }}>
+                  {selectedPatient.medicalHistory && (
+                    <div><strong>History:</strong> {selectedPatient.medicalHistory}</div>
+                  )}
+                  {selectedPatient.medications && (
+                    <div><strong>Medications:</strong> {selectedPatient.medications}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Recording Controls */}
+        <div className="card">
+          <h3 className="card-title">Recording Controls</h3>
+          
+          <div className="recording-controls">
+            <button 
+              className="btn btn-record"
+              onClick={startRecording}
+              disabled={isRecording || isPaused}
+            >
+              {isRecording ? 'Recording...' : 'Start Recording'}
+            </button>
+            
+            {isRecording && !isPaused && (
+              <button 
+                className="btn btn-secondary"
+                onClick={pauseRecording}
+              >
+                Pause
+              </button>
+            )}
+            
+            {isPaused && (
+              <button 
+                className="btn btn-primary"
+                onClick={resumeRecording}
+              >
+                Resume
+              </button>
+            )}
+            
+            <button 
+              className="btn btn-stop"
+              onClick={stopRecording}
+              disabled={!isRecording && !isPaused}
+            >
+              Stop Recording
+            </button>
+            
+            <button 
+              className="btn btn-generate"
+              onClick={generateNotes}
+              disabled={!transcript || isProcessing}
+            >
+              {isProcessing ? 'Generating...' : 'Generate Notes'}
+            </button>
+            
+            <button 
+              className="btn btn-save"
+              onClick={saveVisit}
+              disabled={!medicalNotes || !selectedPatient}
+            >
+              Save Visit
+            </button>
+          </div>
+
+          <div className={`status-indicator ${isRecording ? 'recording' : isPaused ? 'processing' : isProcessing ? 'processing' : 'ready'}`}>
+            {status}
+          </div>
+        </div>
+
+        {/* Live Transcript */}
+        <div className="card">
+          <h3 className="card-title">Live Transcript</h3>
+          <div className="transcript-container">
+            {transcript || interimTranscript ? (
+              <span>
+                {transcript}
+                {interimTranscript && (
+                  <span style={{ color: '#888', fontStyle: 'italic' }}>
+                    {transcript ? ' ' : ''}{interimTranscript}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="transcript-placeholder">Transcript will appear here as you speak...</span>
+            )}
+          </div>
+        </div>
+
+        {/* Generated Medical Notes */}
+        <div className="card">
+          <h3 className="card-title">Generated Medical Notes</h3>
+          <div className="notes-container">
+            {medicalNotes || <span className="notes-placeholder">AI-generated medical notes will appear here...</span>}
+          </div>
+          {medicalNotes && !selectedPatient && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '12px', 
+              backgroundColor: 'rgba(255, 87, 87, 0.1)',
+              border: '2px solid var(--aayu-coral)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              color: 'var(--aayu-coral)'
+            }}>
+              ⚠️ Please select a patient to save these notes
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Patients page component
   const renderPatientsPage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -658,99 +905,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     </div>
   );
 
-  const renderRecordingPage = () => {
-    if (!authService.hasPermission('scribe')) {
-      return (
-        <div className="content-container">
-          <div className="page-header">
-            <h2 className="page-title">Recording Session</h2>
-          </div>
-          <div className="card">
-            <h3 className="card-title">Access Denied</h3>
-            <p>You do not have permission to access the recording functionality. Contact your administrator if you need access.</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="content-container">
-        <div className="page-header">
-          <h2 className="page-title">Recording Session</h2>
-          {selectedPatient && (
-            <div>Recording for: <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong></div>
-          )}
-        </div>
-
-        {!selectedPatient && (
-          <div className="card">
-            <h3 className="card-title">Select a Patient</h3>
-            <p>Please select a patient from the Patients tab before starting a recording session.</p>
-          </div>
-        )}
-
-        {selectedPatient && (
-          <>
-            <div className="card">
-              <h3 className="card-title">Recording Controls</h3>
-              
-              <div className="recording-controls">
-                <button className="btn btn-record" onClick={startRecording} disabled={isRecording}>
-                  {isRecording ? 'Recording...' : 'Start Recording'}
-                </button>
-                
-                <button className="btn btn-stop" onClick={stopRecording} disabled={!isRecording}>
-                  Stop Recording
-                </button>
-                
-                <button className="btn btn-generate" onClick={generateNotes} disabled={!transcript || isProcessing}>
-                  {isProcessing ? 'Generating...' : 'Generate Notes'}
-                </button>
-                
-                <button className="btn btn-save" onClick={saveVisit} disabled={!medicalNotes}>
-                  Save Visit
-                </button>
-
-                <button className="btn btn-secondary" onClick={clearSession}>
-                  Clear Session
-                </button>
-              </div>
-
-              <div className={`status-indicator ${isRecording ? 'recording' : isProcessing ? 'processing' : 'ready'}`}>
-                {status}
-              </div>
-            </div>
-
-            <div className="card">
-              <h3 className="card-title">Live Transcript</h3>
-              <div className="transcript-container">
-                {transcript || interimTranscript ? (
-                  <span>
-                    {transcript}
-                    {interimTranscript && (
-                      <span style={{color: '#888', fontStyle: 'italic'}}>
-                        {transcript ? ' ' : ''}{interimTranscript}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="transcript-placeholder">Transcript will appear here as you speak...</span>
-                )}
-              </div>
-            </div>
-
-            <div className="card">
-              <h3 className="card-title">Generated Medical Notes</h3>
-              <div className="notes-container">
-                {medicalNotes || <span className="notes-placeholder">AI-generated medical notes will appear here...</span>}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
+  // Users page component
   const renderUsersPage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -776,6 +931,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     </div>
   );
 
+  // Settings page component
   const renderSettingsPage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -817,7 +973,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <div className="form-group">
             <label className="form-label">Azure OpenAI Endpoint</label>
             <input 
-              type="text" className="form-input" 
+              type="text" 
+              className="form-input" 
               placeholder="https://your-resource.openai.azure.com/"
               value={apiSettings.openaiEndpoint}
               onChange={(e) => setApiSettings({...apiSettings, openaiEndpoint: e.target.value})}
@@ -827,7 +984,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <div className="form-group">
             <label className="form-label">Azure OpenAI API Key</label>
             <input 
-              type={showApiKeys ? "text" : "password"} className="form-input" 
+              type={showApiKeys ? "text" : "password"} 
+              className="form-input" 
               placeholder="Enter your OpenAI key"
               value={apiSettings.openaiKey}
               onChange={(e) => setApiSettings({...apiSettings, openaiKey: e.target.value})}
@@ -837,7 +995,9 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <div className="form-group">
             <label className="form-label">OpenAI Deployment Name</label>
             <input 
-              type="text" className="form-input" placeholder="gpt-4"
+              type="text" 
+              className="form-input" 
+              placeholder="gpt-4"
               value={apiSettings.openaiDeployment}
               onChange={(e) => setApiSettings({...apiSettings, openaiDeployment: e.target.value})}
             />
@@ -846,7 +1006,9 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <div className="form-group">
             <label className="form-label">API Version</label>
             <input 
-              type="text" className="form-input" placeholder="2024-08-01-preview"
+              type="text" 
+              className="form-input" 
+              placeholder="2024-08-01-preview"
               value={apiSettings.openaiApiVersion}
               onChange={(e) => setApiSettings({...apiSettings, openaiApiVersion: e.target.value})}
             />
@@ -855,9 +1017,10 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <div className="form-group">
             <label>
               <input 
-                type="checkbox" checked={showApiKeys}
+                type="checkbox" 
+                checked={showApiKeys}
                 onChange={(e) => setShowApiKeys(e.target.checked)}
-                style={{marginRight: '8px'}}
+                style={{ marginRight: '8px' }}
               />
               Show API Keys
             </label>
@@ -871,6 +1034,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     </div>
   );
 
+  // Main render
   return (
     <div className="app-container">
       {currentUser && renderSidebar()}
@@ -878,14 +1042,15 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       <main className="main-content">
         {currentUser && (
           <>
-            {activeTab === 'patients' && renderPatientsPage()}
             {activeTab === 'scribe' && renderScribePage()}
+            {activeTab === 'patients' && renderPatientsPage()}
             {activeTab === 'settings' && renderSettingsPage()}
             {activeTab === 'users' && authService.hasPermission('add_users') && renderUsersPage()}
           </>
         )}
       </main>
 
+      {/* Login Modal */}
       {showLoginModal && (
         <div className="modal-backdrop">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -900,7 +1065,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Username</label>
                 <input
-                  type="text" className="form-input"
+                  type="text" 
+                  className="form-input"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
                   placeholder="Enter your username"
@@ -911,7 +1077,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Password</label>
                 <input
-                  type="password" className="form-input"
+                  type="password" 
+                  className="form-input"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
                   placeholder="Enter your password"
@@ -931,8 +1098,12 @@ ${selectedPatient.visits.slice(-3).map(visit =>
             </form>
 
             <div style={{ 
-              marginTop: '24px', padding: '16px', backgroundColor: 'var(--aayu-pale-lime)',
-              borderRadius: '8px', fontSize: '14px', textAlign: 'center'
+              marginTop: '24px', 
+              padding: '16px', 
+              backgroundColor: 'var(--aayu-pale-lime)',
+              borderRadius: '8px', 
+              fontSize: '14px', 
+              textAlign: 'center'
             }}>
               <strong>Available Users:</strong><br />
               darshan@aayuwell.com (Super Admin)<br />
@@ -942,6 +1113,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         </div>
       )}
 
+      {/* Create User Modal */}
       {showCreateUserModal && (
         <div className="modal-backdrop" onClick={() => setShowCreateUserModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -957,7 +1129,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Username (Email) *</label>
                 <input
-                  type="text" className="form-input"
+                  type="text" 
+                  className="form-input"
                   value={newUser.username}
                   onChange={(e) => setNewUser({...newUser, username: e.target.value})}
                   placeholder="user@example.com"
@@ -968,7 +1141,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Full Name *</label>
                 <input
-                  type="text" className="form-input"
+                  type="text" 
+                  className="form-input"
                   value={newUser.name}
                   onChange={(e) => setNewUser({...newUser, name: e.target.value})}
                   placeholder="Enter full name"
@@ -996,7 +1170,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Password *</label>
                 <input
-                  type="password" className="form-input"
+                  type="password" 
+                  className="form-input"
                   value={newUser.password}
                   onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                   placeholder="Enter password"
@@ -1007,7 +1182,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
               <div className="form-group">
                 <label className="form-label">Confirm Password *</label>
                 <input
-                  type="password" className="form-input"
+                  type="password" 
+                  className="form-input"
                   value={newUser.confirmPassword}
                   onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
                   placeholder="Confirm password"
@@ -1026,6 +1202,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         </div>
       )}
 
+      {/* Add Patient Modal */}
       {showPatientModal && (
         <div className="modal-backdrop" onClick={() => setShowPatientModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1040,7 +1217,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
             <div className="form-group">
               <label className="form-label">First Name *</label>
               <input
-                type="text" className="form-input"
+                type="text" 
+                className="form-input"
                 value={newPatient.firstName}
                 onChange={(e) => setNewPatient({...newPatient, firstName: e.target.value})}
                 placeholder="Enter first name"
@@ -1050,7 +1228,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
             <div className="form-group">
               <label className="form-label">Last Name *</label>
               <input
-                type="text" className="form-input"
+                type="text" 
+                className="form-input"
                 value={newPatient.lastName}
                 onChange={(e) => setNewPatient({...newPatient, lastName: e.target.value})}
                 placeholder="Enter last name"
@@ -1060,7 +1239,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
             <div className="form-group">
               <label className="form-label">Date of Birth *</label>
               <input
-                type="date" className="form-input"
+                type="date" 
+                className="form-input"
                 value={newPatient.dateOfBirth}
                 onChange={(e) => setNewPatient({...newPatient, dateOfBirth: e.target.value})}
               />
@@ -1096,6 +1276,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         </div>
       )}
 
+      {/* Visit Detail Modal */}
       {showVisitModal && selectedVisit && (
         <div className="modal-backdrop" onClick={() => setShowVisitModal(false)}>
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
