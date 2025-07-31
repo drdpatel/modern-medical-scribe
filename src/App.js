@@ -68,52 +68,28 @@ function App() {
     const initializeApp = async () => {
       setIsLoading(true);
       try {
-        // First, test environment variables
-        console.log('Testing environment variables...');
-        const connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
+        console.log('Initializing simplified medical scribe...');
         
-        if (!connectionString || connectionString === 'your_connection_string_here') {
-          console.error('Azure connection string not found in environment variables');
-          alert('Azure connection string not configured. Please check GitHub Codespace secrets.');
-          setShowLoginModal(true);
-          setIsLoading(false);
-          return;
-        }
-
-        console.log('Connection string found, initializing authService...');
-        
-        // Wait for authService to be fully initialized
-        let retries = 0;
-        while (!authService.isReady() && retries < 10) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          retries++;
-        }
-
-        if (!authService.isReady()) {
-          throw new Error('AuthService failed to initialize after 10 seconds');
-        }
-
-        console.log('AuthService ready, checking for existing user...');
-        
-        // Check if user is already logged in
-        const user = await authService.loadCurrentUser();
+        // Check if user is already logged in (much simpler now!)
+        const user = authService.currentUser;
         if (user) {
           setCurrentUser(user);
           setStatus('Ready to begin');
-          await loadPatientsFromAzure();
+          loadPatientsFromLocalStorage();
         } else {
           setShowLoginModal(true);
         }
         
-        // Load API settings from localStorage (backward compatibility)
+        // Load API settings from localStorage
         const savedApiSettings = localStorage.getItem('medicalScribeApiSettings');
         if (savedApiSettings) {
           const settings = JSON.parse(savedApiSettings);
           setApiSettings(settings);
         }
+
+        console.log('✅ Initialization complete!');
       } catch (error) {
         console.error('Initialization error:', error);
-        alert('Failed to initialize app: ' + error.message + '. Falling back to login screen.');
         setShowLoginModal(true);
       } finally {
         setIsLoading(false);
@@ -121,178 +97,48 @@ function App() {
     };
 
     initializeApp();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Separate function to reload patients from Azure (used by other parts of the app)
-  const reloadPatientsFromAzure = useCallback(async () => {
-    try {
-      const azurePatientsRaw = await authService.getPatients();
-      
-      // Convert Azure entities to app format
-      const azurePatients = azurePatientsRaw.map(entity => ({
-        id: parseInt(entity.rowKey),
-        firstName: entity.firstName,
-        lastName: entity.lastName,
-        dateOfBirth: entity.dateOfBirth,
-        medicalHistory: entity.medicalHistory || '',
-        medications: entity.medications || '',
-        visits: [], // Will be loaded separately
-        createdAt: entity.createdAt
-      }));
-
-      // Load visits for each patient
-      for (const patient of azurePatients) {
-        const visitsRaw = await authService.getVisits(patient.id);
-        patient.visits = visitsRaw.map(entity => ({
-          id: parseInt(entity.rowKey),
-          date: entity.date,
-          time: entity.time,
-          transcript: entity.transcript,
-          notes: entity.notes,
-          timestamp: entity.timestamp,
-          createdBy: entity.createdBy,
-          createdByName: entity.createdByName
-        }));
-      }
-
-      setPatients(azurePatients);
-    } catch (error) {
-      console.error('Failed to reload patients from Azure:', error);
-    }
-  }, []); // loadPatientsFromAzure creates circular dependency - disabled lint
-
-  // Fallback to localStorage (backward compatibility)
+  // Load patients from localStorage (much simpler!)
   const loadPatientsFromLocalStorage = useCallback(() => {
     try {
-      const savedPatients = localStorage.getItem('medicalScribePatients');
-      if (savedPatients) {
-        setPatients(JSON.parse(savedPatients));
-      }
-    } catch (error) {
-      console.warn('Could not load from localStorage');
-    }
-  }, []);
-
-  // Migrate existing localStorage data to Azure
-  const migrateLocalStorageData = useCallback(async () => {
-    try {
-      const savedPatients = localStorage.getItem('medicalScribePatients');
-      if (savedPatients) {
-        const localPatients = JSON.parse(savedPatients);
-        
-        for (const patient of localPatients) {
-          // Save patient to Azure
-          await authService.savePatient(patient);
-          
-          // Save visits to Azure
-          for (const visit of patient.visits || []) {
-            await authService.saveVisit(patient.id, visit);
-          }
-        }
-        
-        // Clear localStorage after successful migration
-        localStorage.removeItem('medicalScribePatients');
-        console.log('Successfully migrated localStorage data to Azure');
-      }
-    } catch (error) {
-      console.error('Migration failed:', error);
-    }
-  }, []);
-
-  // Load patients from Azure Table Storage
-  const loadPatientsFromAzure = useCallback(async () => {
-    try {
-      const azurePatientsRaw = await authService.getPatients();
+      const patientsData = authService.getPatients();
       
-      // Convert Azure entities to app format
-      const azurePatients = azurePatientsRaw.map(entity => ({
-        id: parseInt(entity.rowKey),
-        firstName: entity.firstName,
-        lastName: entity.lastName,
-        dateOfBirth: entity.dateOfBirth,
-        medicalHistory: entity.medicalHistory || '',
-        medications: entity.medications || '',
-        visits: [], // Will be loaded separately
-        createdAt: entity.createdAt
-      }));
-
       // Load visits for each patient
-      for (const patient of azurePatients) {
-        const visitsRaw = await authService.getVisits(patient.id);
-        patient.visits = visitsRaw.map(entity => ({
-          id: parseInt(entity.rowKey),
-          date: entity.date,
-          time: entity.time,
-          transcript: entity.transcript,
-          notes: entity.notes,
-          timestamp: entity.timestamp,
-          createdBy: entity.createdBy,
-          createdByName: entity.createdByName
-        }));
-      }
-
-      setPatients(azurePatients);
-
-      // Migrate localStorage data if exists and no Azure data
-      if (azurePatients.length === 0) {
-        await migrateLocalStorageData();
-        // After migration, reload the patients
-        const azurePatientsAfterMigration = await authService.getPatients();
-        const migratedPatients = azurePatientsAfterMigration.map(entity => ({
-          id: parseInt(entity.rowKey),
-          firstName: entity.firstName,
-          lastName: entity.lastName,
-          dateOfBirth: entity.dateOfBirth,
-          medicalHistory: entity.medicalHistory || '',
-          medications: entity.medications || '',
-          visits: [], // Will be loaded separately
-          createdAt: entity.createdAt
-        }));
-
-        // Load visits for migrated patients
-        for (const patient of migratedPatients) {
-          const visitsRaw = await authService.getVisits(patient.id);
-          patient.visits = visitsRaw.map(entity => ({
-            id: parseInt(entity.rowKey),
-            date: entity.date,
-            time: entity.time,
-            transcript: entity.transcript,
-            notes: entity.notes,
-            timestamp: entity.timestamp,
-            createdBy: entity.createdBy,
-            createdByName: entity.createdByName
-          }));
-        }
-
-        setPatients(migratedPatients);
-      }
+      const patientsWithVisits = patientsData.map(patient => {
+        const visits = authService.getVisits(patient.id);
+        return {
+          ...patient,
+          visits: visits || []
+        };
+      });
+      
+      setPatients(patientsWithVisits);
     } catch (error) {
-      console.error('Failed to load patients from Azure:', error);
-      // Fallback to localStorage if Azure fails
-      loadPatientsFromLocalStorage();
+      console.error('Failed to load patients:', error);
+      setPatients([]);
     }
-  }, [migrateLocalStorageData, loadPatientsFromLocalStorage]);
+  }, []);
 
-  // Login handler
+  // Reload patients (for use after adding new patients/visits)
+  const reloadPatients = useCallback(() => {
+    loadPatientsFromLocalStorage();
+  }, [loadPatientsFromLocalStorage]);
+
+  // Login handler (much simpler!)
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
     
     try {
-      console.log('Login attempt - ensuring AuthService is ready...');
-      
-      // CRITICAL FIX: Ensure AuthService is ready before login
-      await authService.ready;
-      console.log('✅ AuthService ready for login');
-      
-      const user = await authService.login(loginForm.username, loginForm.password);
+      console.log('Attempting login...');
+      const user = authService.login(loginForm.username, loginForm.password);
       setCurrentUser(user);
       setShowLoginModal(false);
       setLoginForm({ username: '', password: '' });
       setStatus('Login successful - Ready to begin');
       
-      await reloadPatientsFromAzure();
+      loadPatientsFromLocalStorage();
     } catch (error) {
       console.error('Login failed:', error);
       setLoginError(error.message);
@@ -321,7 +167,7 @@ function App() {
     }
 
     try {
-      await authService.createUser(newUser);
+      const result = authService.createUser(newUser);
       setShowCreateUserModal(false);
       setNewUser({
         username: '',
@@ -330,33 +176,13 @@ function App() {
         name: '',
         role: 'medical_provider'
       });
-      alert('User created successfully');
+      alert(result.message);
     } catch (error) {
       alert('Failed to create user: ' + error.message);
     }
   };
 
-  // Save patients to Azure (replacing localStorage)
-  const savePatients = async (updatedPatients) => {
-    setPatients(updatedPatients);
-    
-    // Save to Azure instead of localStorage
-    try {
-      for (const patient of updatedPatients) {
-        await authService.savePatient(patient);
-      }
-    } catch (error) {
-      console.error('Failed to save to Azure:', error);
-      // Fallback to localStorage
-      try {
-        localStorage.setItem('medicalScribePatients', JSON.stringify(updatedPatients));
-      } catch (e) {
-        console.warn('Cannot save to localStorage');
-      }
-    }
-  };
-
-  // Save API settings (keep localStorage for backward compatibility)
+  // Save API settings
   const saveApiSettings = (settings) => {
     setApiSettings(settings);
     try {
@@ -369,7 +195,7 @@ function App() {
     }
   };
 
-  // Add new patient
+  // Add new patient (simplified)
   const addPatient = async () => {
     if (!authService.hasPermission('add_patients')) {
       alert('You do not have permission to add patients');
@@ -388,15 +214,20 @@ function App() {
       createdAt: new Date().toISOString()
     };
 
-    await savePatients([...patients, patient]);
-    setNewPatient({
-      firstName: '',
-      lastName: '',
-      dateOfBirth: '',
-      medicalHistory: '',
-      medications: ''
-    });
-    setShowPatientModal(false);
+    try {
+      await authService.savePatient(patient);
+      reloadPatients();
+      setNewPatient({
+        firstName: '',
+        lastName: '',
+        dateOfBirth: '',
+        medicalHistory: '',
+        medications: ''
+      });
+      setShowPatientModal(false);
+    } catch (error) {
+      alert('Failed to save patient: ' + error.message);
+    }
   };
 
   // Real Azure Speech SDK recording
@@ -615,18 +446,18 @@ Please convert this into structured medical notes.`
     };
 
     try {
-      // Save to Azure
       await authService.saveVisit(selectedPatient.id, visit);
+      reloadPatients();
       
-      // Update local state
-      const updatedPatients = patients.map(p => 
-        p.id === selectedPatient.id 
-          ? { ...p, visits: [...p.visits, { ...visit, createdBy: currentUser.id, createdByName: currentUser.name }] }
-          : p
-      );
-
-      setPatients(updatedPatients);
-      setSelectedPatient(updatedPatients.find(p => p.id === selectedPatient.id));
+      // Update selected patient with new visit
+      const updatedPatient = patients.find(p => p.id === selectedPatient.id);
+      if (updatedPatient) {
+        setSelectedPatient({
+          ...updatedPatient,
+          visits: [...updatedPatient.visits, { ...visit, createdBy: currentUser.id, createdByName: currentUser.name }]
+        });
+      }
+      
       setStatus('Visit saved successfully');
     } catch (error) {
       console.error('Failed to save visit:', error);
@@ -747,8 +578,8 @@ Please convert this into structured medical notes.`
       </nav>
       
       <div className="sidebar-footer">
-        Medical Scribe AI v2.1<br />
-        Secure • HIPAA Compliant
+        Medical Scribe AI v2.2<br />
+        Secure • Simplified
       </div>
     </div>
   );
@@ -1021,7 +852,16 @@ Please convert this into structured medical notes.`
 
       <div className="card">
         <h3 className="card-title">User Administration</h3>
-        <p>User management functionality coming soon. For now, users can be created using the "Add New User" button.</p>
+        <p>In this simplified version, users are managed through environment variables. To add a user permanently, update your <code>REACT_APP_USERS</code> environment variable.</p>
+        
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--aayu-pale-lime)', borderRadius: '8px', fontSize: '14px' }}>
+          <strong>Current Users:</strong><br />
+          {Object.entries(authService.users).map(([username, user]) => (
+            <div key={username} style={{ margin: '8px 0' }}>
+              • <strong>{username}</strong> - {user.name} ({user.role})
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1204,9 +1044,9 @@ Please convert this into structured medical notes.`
               fontSize: '14px',
               textAlign: 'center'
             }}>
-              <strong>Default Super Admin:</strong><br />
-              Username: darshan@aayuwell.com<br />
-              Password: Aayuscribe1212@
+              <strong>Available Users:</strong><br />
+              darshan@aayuwell.com (Super Admin)<br />
+              admin (Admin) • doctor (Provider) • staff (Support)
             </div>
           </div>
         </div>
@@ -1219,7 +1059,7 @@ Please convert this into structured medical notes.`
             <div className="modal-header">
               <div>
                 <h3 className="modal-title">Create New User</h3>
-                <p className="modal-subtitle">Add a new user to the system</p>
+                <p className="modal-subtitle">Note: Users must be added to environment config permanently</p>
               </div>
               <button className="modal-close" onClick={() => setShowCreateUserModal(false)}>
                 Close
@@ -1230,7 +1070,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Username (Email) *</label>
                 <input
-                  type="email"
+                  type="text"
                   className="form-input"
                   value={newUser.username}
                   onChange={(e) => setNewUser({...newUser, username: e.target.value})}
@@ -1297,7 +1137,7 @@ Please convert this into structured medical notes.`
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-success">
-                  Create User
+                  Log User Info
                 </button>
               </div>
             </form>
