@@ -1,11 +1,10 @@
 // authService.js - Azure Table Storage Authentication
 import { TableClient } from '@azure/data-tables';
 import CryptoJS from 'crypto-js';
-import * as jose from 'jose';
 
 class AuthService {
   constructor() {
-    this.connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
+    this.connectionString = null;
     this.usersTableClient = null;
     this.patientsTableClient = null;
     this.visitsTableClient = null;
@@ -13,33 +12,51 @@ class AuthService {
     this.sessionTimeout = parseInt(process.env.REACT_APP_SESSION_TIMEOUT) || 3600000; // 1 hour
     this.loginDuration = parseInt(process.env.REACT_APP_LOGIN_DURATION) || 43200000; // 12 hours
     this.inactivityTimer = null;
+    this.isInitialized = false;
     
-    this.initializeTables();
-    this.loadCurrentUser();
-    this.startInactivityTimer();
+    // Initialize asynchronously
+    this.initialize();
   }
 
-  // Initialize Azure Table Storage clients
-  async initializeTables() {
+  // Async initialization method
+  async initialize() {
     try {
+      console.log('Starting AuthService initialization...');
+      
+      // Get connection string from environment
+      this.connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
+      
       if (!this.connectionString || this.connectionString === 'your_connection_string_here') {
         console.warn('Azure connection string not configured');
+        this.isInitialized = false;
         return;
       }
 
+      console.log('Connection string found, creating table clients...');
+      
+      // Initialize table clients
       this.usersTableClient = new TableClient(this.connectionString, 'users');
       this.patientsTableClient = new TableClient(this.connectionString, 'patients');
       this.visitsTableClient = new TableClient(this.connectionString, 'visits');
 
+      console.log('Creating tables if they don\'t exist...');
+      
       // Create tables if they don't exist
       await this.usersTableClient.createTable();
       await this.patientsTableClient.createTable();
       await this.visitsTableClient.createTable();
 
+      console.log('Tables created, creating super admin if needed...');
+      
       // Create super admin if no users exist
       await this.createSuperAdminIfNeeded();
+      
+      this.isInitialized = true;
+      console.log('AuthService initialization complete');
+      
     } catch (error) {
-      console.error('Failed to initialize tables:', error);
+      console.error('Failed to initialize AuthService:', error);
+      this.isInitialized = false;
     }
   }
 
@@ -78,32 +95,32 @@ class AuthService {
     return CryptoJS.SHA256(password + 'aayuwell_salt').toString();
   }
 
-  // Generate JWT token
-  async generateToken(user) {
-    const secret = new TextEncoder().encode('aayuwell_jwt_secret_key_2024');
-    const payload = {
+  // Simple token generation (replacing complex JWT)
+  generateToken(user) {
+    const tokenData = {
       userId: user.rowKey,
       username: user.username,
       role: user.role,
       name: user.name,
-      exp: Math.floor(Date.now() / 1000) + (this.loginDuration / 1000)
+      expires: Date.now() + this.loginDuration,
+      issued: Date.now()
     };
-
-    const jwt = await new jose.SignJWT(payload)
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('12h')
-      .sign(secret);
-
-    return jwt;
+    
+    // Simple base64 encoding (for demo - in production use proper JWT)
+    return btoa(JSON.stringify(tokenData));
   }
 
-  // Verify JWT token
-  async verifyToken(token) {
+  // Simple token verification
+  verifyToken(token) {
     try {
-      const secret = new TextEncoder().encode('aayuwell_jwt_secret_key_2024');
-      const { payload } = await jose.jwtVerify(token, secret);
-      return payload;
+      const tokenData = JSON.parse(atob(token));
+      
+      // Check if token is expired
+      if (Date.now() > tokenData.expires) {
+        return null;
+      }
+      
+      return tokenData;
     } catch (error) {
       return null;
     }
@@ -112,14 +129,14 @@ class AuthService {
   // Login user
   async login(username, password) {
     try {
-      if (!this.usersTableClient) {
-        throw new Error('Authentication service not initialized');
+      if (!this.isInitialized) {
+        throw new Error('Authentication service not initialized. Please check your Azure connection.');
       }
 
       const userEntity = await this.usersTableClient.getEntity('user', username);
       
       if (!userEntity || !userEntity.isActive) {
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid credentials or account disabled');
       }
 
       const hashedPassword = this.hashPassword(password);
@@ -128,7 +145,7 @@ class AuthService {
       }
 
       // Generate token
-      const token = await this.generateToken(userEntity);
+      const token = this.generateToken(userEntity);
 
       // Store in localStorage
       localStorage.setItem('authToken', token);
@@ -144,6 +161,7 @@ class AuthService {
       this.startInactivityTimer();
       return this.currentUser;
     } catch (error) {
+      console.error('Login error:', error);
       throw new Error('Login failed: ' + error.message);
     }
   }
@@ -151,6 +169,11 @@ class AuthService {
   // Load current user from localStorage
   async loadCurrentUser() {
     try {
+      if (!this.isInitialized) {
+        console.log('AuthService not initialized yet, cannot load user');
+        return null;
+      }
+
       const token = localStorage.getItem('authToken');
       const lastActivity = localStorage.getItem('lastActivity');
 
@@ -165,7 +188,7 @@ class AuthService {
         return null;
       }
 
-      const payload = await this.verifyToken(token);
+      const payload = this.verifyToken(token);
       if (!payload) {
         this.logout();
         return null;
@@ -181,6 +204,7 @@ class AuthService {
       this.startInactivityTimer();
       return this.currentUser;
     } catch (error) {
+      console.error('Load user error:', error);
       this.logout();
       return null;
     }
@@ -364,7 +388,7 @@ class AuthService {
 
   // Check if service is ready
   isReady() {
-    return this.usersTableClient !== null;
+    return this.isInitialized && this.usersTableClient !== null;
   }
 }
 
