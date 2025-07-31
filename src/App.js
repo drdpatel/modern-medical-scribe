@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
@@ -121,10 +121,10 @@ function App() {
     };
 
     initializeApp();
-  }, []);
+  }, []); // Keep empty - loadPatientsFromAzure is memoized with useCallback
 
   // Load patients from Azure Table Storage
-  const loadPatientsFromAzure = async () => {
+  const loadPatientsFromAzure = useCallback(async () => {
     try {
       const azurePatientsRaw = await authService.getPatients();
       
@@ -160,16 +160,45 @@ function App() {
       // Migrate localStorage data if exists and no Azure data
       if (azurePatients.length === 0) {
         await migrateLocalStorageData();
+        // After migration, reload the patients
+        const azurePatientsAfterMigration = await authService.getPatients();
+        const migratedPatients = azurePatientsAfterMigration.map(entity => ({
+          id: parseInt(entity.rowKey),
+          firstName: entity.firstName,
+          lastName: entity.lastName,
+          dateOfBirth: entity.dateOfBirth,
+          medicalHistory: entity.medicalHistory || '',
+          medications: entity.medications || '',
+          visits: [], // Will be loaded separately
+          createdAt: entity.createdAt
+        }));
+
+        // Load visits for migrated patients
+        for (const patient of migratedPatients) {
+          const visitsRaw = await authService.getVisits(patient.id);
+          patient.visits = visitsRaw.map(entity => ({
+            id: parseInt(entity.rowKey),
+            date: entity.date,
+            time: entity.time,
+            transcript: entity.transcript,
+            notes: entity.notes,
+            timestamp: entity.timestamp,
+            createdBy: entity.createdBy,
+            createdByName: entity.createdByName
+          }));
+        }
+
+        setPatients(migratedPatients);
       }
     } catch (error) {
       console.error('Failed to load patients from Azure:', error);
       // Fallback to localStorage if Azure fails
       loadPatientsFromLocalStorage();
     }
-  };
+  }, [migrateLocalStorageData]); // Depends on migrateLocalStorageData
 
   // Migrate existing localStorage data to Azure
-  const migrateLocalStorageData = async () => {
+  const migrateLocalStorageData = useCallback(async () => {
     try {
       const savedPatients = localStorage.getItem('medicalScribePatients');
       if (savedPatients) {
@@ -185,9 +214,6 @@ function App() {
           }
         }
         
-        // Reload from Azure
-        await loadPatientsFromAzure();
-        
         // Clear localStorage after successful migration
         localStorage.removeItem('medicalScribePatients');
         console.log('Successfully migrated localStorage data to Azure');
@@ -195,10 +221,10 @@ function App() {
     } catch (error) {
       console.error('Migration failed:', error);
     }
-  };
+  }, []); // No dependencies
 
   // Fallback to localStorage (backward compatibility)
-  const loadPatientsFromLocalStorage = () => {
+  const loadPatientsFromLocalStorage = useCallback(() => {
     try {
       const savedPatients = localStorage.getItem('medicalScribePatients');
       if (savedPatients) {
@@ -207,7 +233,7 @@ function App() {
     } catch (error) {
       console.warn('Could not load from localStorage');
     }
-  };
+  }, []);
 
   // Login handler
   const handleLogin = async (e) => {
