@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
 import './App.css';
 
 function App() {
-  // Authentication states
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -13,17 +12,10 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [newUser, setNewUser] = useState({
-    username: '',
-    password: '',
-    confirmPassword: '',
-    name: '',
-    role: 'medical_provider'
+    username: '', password: '', confirmPassword: '', name: '', role: 'medical_provider'
   });
 
-  // Navigation state
   const [activeTab, setActiveTab] = useState('patients');
-  
-  // Patient management states
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,16 +23,10 @@ function App() {
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   
-  // New patient form
   const [newPatient, setNewPatient] = useState({
-    firstName: '',
-    lastName: '',
-    dateOfBirth: '',
-    medicalHistory: '',
-    medications: ''
+    firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: ''
   });
 
-  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -48,29 +34,32 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('Please log in to continue');
 
-  // API Settings states
   const [apiSettings, setApiSettings] = useState({
-    speechKey: '',
-    speechRegion: 'eastus',
-    openaiEndpoint: '',
-    openaiKey: '',
-    openaiDeployment: 'gpt-4',
-    openaiApiVersion: '2024-08-01-preview'
+    speechKey: '', speechRegion: 'eastus', openaiEndpoint: '', openaiKey: '', 
+    openaiDeployment: 'gpt-4', openaiApiVersion: '2024-08-01-preview'
   });
   const [showApiKeys, setShowApiKeys] = useState(false);
 
-  // Azure Speech SDK refs
   const recognizerRef = useRef(null);
   const audioConfigRef = useRef(null);
 
-  // Initialize authentication and load data
+  const loadPatientsFromLocalStorage = () => {
+    try {
+      const patientsData = authService.getPatients();
+      const patientsWithVisits = patientsData.map(patient => {
+        const visits = authService.getVisits(patient.id);
+        return { ...patient, visits: visits || [] };
+      });
+      setPatients(patientsWithVisits);
+    } catch (error) {
+      setPatients([]);
+    }
+  };
+
   useEffect(() => {
-    const initializeApp = async () => {
+    const initializeApp = () => {
       setIsLoading(true);
       try {
-        console.log('Initializing simplified medical scribe...');
-        
-        // Check if user is already logged in (much simpler now!)
         const user = authService.currentUser;
         if (user) {
           setCurrentUser(user);
@@ -80,16 +69,11 @@ function App() {
           setShowLoginModal(true);
         }
         
-        // Load API settings from localStorage
         const savedApiSettings = localStorage.getItem('medicalScribeApiSettings');
         if (savedApiSettings) {
-          const settings = JSON.parse(savedApiSettings);
-          setApiSettings(settings);
+          setApiSettings(JSON.parse(savedApiSettings));
         }
-
-        console.log('✅ Initialization complete!');
       } catch (error) {
-        console.error('Initialization error:', error);
         setShowLoginModal(true);
       } finally {
         setIsLoading(false);
@@ -99,53 +83,26 @@ function App() {
     initializeApp();
   }, []);
 
-  // Load patients from localStorage (much simpler!)
-  const loadPatientsFromLocalStorage = useCallback(() => {
-    try {
-      const patientsData = authService.getPatients();
-      
-      // Load visits for each patient
-      const patientsWithVisits = patientsData.map(patient => {
-        const visits = authService.getVisits(patient.id);
-        return {
-          ...patient,
-          visits: visits || []
-        };
-      });
-      
-      setPatients(patientsWithVisits);
-    } catch (error) {
-      console.error('Failed to load patients:', error);
-      setPatients([]);
-    }
-  }, []);
-
-  // Reload patients (for use after adding new patients/visits)
-  const reloadPatients = useCallback(() => {
+  const reloadPatients = () => {
     loadPatientsFromLocalStorage();
-  }, [loadPatientsFromLocalStorage]);
+  };
 
-  // Login handler (much simpler!)
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setLoginError('');
     
     try {
-      console.log('Attempting login...');
       const user = authService.login(loginForm.username, loginForm.password);
       setCurrentUser(user);
       setShowLoginModal(false);
       setLoginForm({ username: '', password: '' });
       setStatus('Login successful - Ready to begin');
-      
       loadPatientsFromLocalStorage();
     } catch (error) {
-      console.error('Login failed:', error);
       setLoginError(error.message);
     }
   };
 
-  // Logout handler
   const handleLogout = () => {
     authService.logout();
     setCurrentUser(null);
@@ -157,8 +114,7 @@ function App() {
     setShowLoginModal(true);
   };
 
-  // Create user handler
-  const handleCreateUser = async (e) => {
+  const handleCreateUser = (e) => {
     e.preventDefault();
     
     if (newUser.password !== newUser.confirmPassword) {
@@ -169,20 +125,13 @@ function App() {
     try {
       const result = authService.createUser(newUser);
       setShowCreateUserModal(false);
-      setNewUser({
-        username: '',
-        password: '',
-        confirmPassword: '',
-        name: '',
-        role: 'medical_provider'
-      });
+      setNewUser({ username: '', password: '', confirmPassword: '', name: '', role: 'medical_provider' });
       alert(result.message);
     } catch (error) {
       alert('Failed to create user: ' + error.message);
     }
   };
 
-  // Save API settings
   const saveApiSettings = (settings) => {
     setApiSettings(settings);
     try {
@@ -195,8 +144,7 @@ function App() {
     }
   };
 
-  // Add new patient (simplified)
-  const addPatient = async () => {
+  const addPatient = () => {
     if (!authService.hasPermission('add_patients')) {
       alert('You do not have permission to add patients');
       return;
@@ -215,22 +163,15 @@ function App() {
     };
 
     try {
-      await authService.savePatient(patient);
+      authService.savePatient(patient);
       reloadPatients();
-      setNewPatient({
-        firstName: '',
-        lastName: '',
-        dateOfBirth: '',
-        medicalHistory: '',
-        medications: ''
-      });
+      setNewPatient({ firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: '' });
       setShowPatientModal(false);
     } catch (error) {
       alert('Failed to save patient: ' + error.message);
     }
   };
 
-  // Real Azure Speech SDK recording
   const startRecording = async () => {
     if (!authService.hasPermission('scribe')) {
       setStatus('You do not have permission to record');
@@ -291,7 +232,6 @@ function App() {
           setStatus('Recording... Speak now');
         },
         (error) => {
-          console.error('Recognition start error:', error);
           setIsRecording(false);
           if (error.toString().includes('1006')) {
             setStatus('Invalid Speech key. Check your Azure Speech Service key.');
@@ -304,7 +244,6 @@ function App() {
       );
       
     } catch (error) {
-      console.error('Recording setup error:', error);
       setStatus(`Setup failed: ${error.message}`);
     }
   };
@@ -318,7 +257,6 @@ function App() {
           setStatus('Recording complete');
         },
         (error) => {
-          console.error('Stop recording error:', error);
           setIsRecording(false);
           setInterimTranscript('');
           setStatus('Recording stopped with error');
@@ -332,7 +270,6 @@ function App() {
     }
   };
 
-  // Real Azure OpenAI integration
   const generateNotes = async () => {
     if (!authService.hasPermission('scribe')) {
       setStatus('You do not have permission to generate notes');
@@ -344,12 +281,9 @@ function App() {
       return;
     }
 
-    const openaiEndpoint = apiSettings.openaiEndpoint;
-    const openaiKey = apiSettings.openaiKey;
-    const deployment = apiSettings.openaiDeployment;
-    const apiVersion = apiSettings.openaiApiVersion;
+    const { openaiEndpoint, openaiKey, openaiDeployment, openaiApiVersion } = apiSettings;
 
-    if (!openaiEndpoint || !openaiKey || !deployment) {
+    if (!openaiEndpoint || !openaiKey || !openaiDeployment) {
       setStatus('Please configure Azure OpenAI settings first');
       setActiveTab('settings');
       return;
@@ -378,22 +312,11 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       const systemPrompt = `You are a medical scribe assistant. Create professional medical notes including Chief Complaint, History of Present Illness, Assessment, and Plan sections. Use appropriate medical terminology and maintain professional format.`;
 
       const response = await axios.post(
-        `${openaiEndpoint}openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`,
+        `${openaiEndpoint}openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`,
         {
           messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
-              role: 'user',
-              content: `${patientContext}
-
-CURRENT VISIT TRANSCRIPT:
-${transcript}
-
-Please convert this into structured medical notes.`
-            }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `${patientContext}\n\nCURRENT VISIT TRANSCRIPT:\n${transcript}\n\nPlease convert this into structured medical notes.` }
           ],
           max_tokens: 1500,
           temperature: 0.3
@@ -410,7 +333,6 @@ Please convert this into structured medical notes.`
       setStatus('Medical notes generated successfully');
       
     } catch (error) {
-      console.error('AI generation error:', error);
       if (error.response?.status === 401) {
         setStatus('OpenAI authentication failed. Check your API key.');
       } else if (error.response?.status === 404) {
@@ -425,7 +347,7 @@ Please convert this into structured medical notes.`
     }
   };
 
-  const saveVisit = async () => {
+  const saveVisit = () => {
     if (!selectedPatient || !medicalNotes) {
       setStatus('Cannot save - missing patient or notes');
       return;
@@ -446,10 +368,9 @@ Please convert this into structured medical notes.`
     };
 
     try {
-      await authService.saveVisit(selectedPatient.id, visit);
+      authService.saveVisit(selectedPatient.id, visit);
       reloadPatients();
       
-      // Update selected patient with new visit
       const updatedPatient = patients.find(p => p.id === selectedPatient.id);
       if (updatedPatient) {
         setSelectedPatient({
@@ -460,23 +381,19 @@ Please convert this into structured medical notes.`
       
       setStatus('Visit saved successfully');
     } catch (error) {
-      console.error('Failed to save visit:', error);
       setStatus('Failed to save visit: ' + error.message);
     }
   };
 
-  // Filter patients based on search
   const filteredPatients = patients.filter(patient =>
     `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.dateOfBirth.includes(searchTerm)
   );
 
-  // Get patient initials for avatar
   const getPatientInitials = (patient) => {
     return (patient.firstName[0] + patient.lastName[0]).toUpperCase();
   };
 
-  // Get avatar color based on patient name
   const getAvatarColor = (patient) => {
     const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
     const index = (patient.firstName.charCodeAt(0) + patient.lastName.charCodeAt(0)) % colors.length;
@@ -490,18 +407,12 @@ Please convert this into structured medical notes.`
     setStatus('Session cleared - Ready to record');
   };
 
-  // Show loading screen
   if (isLoading) {
     return (
       <div className="app-container">
         <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: '100vh',
-          backgroundColor: 'var(--aayu-light-gray)',
-          fontSize: '18px',
-          color: 'var(--aayu-navy)'
+          display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh',
+          backgroundColor: 'var(--aayu-light-gray)', fontSize: '18px', color: 'var(--aayu-navy)'
         }}>
           Loading Aayu AI Scribe...
         </div>
@@ -509,22 +420,15 @@ Please convert this into structured medical notes.`
     );
   }
 
-  // Render navigation
   const renderSidebar = () => (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h1 className="sidebar-title">
-          <span>Aayu AI Scribe</span>
-        </h1>
+        <h1 className="sidebar-title"><span>Aayu AI Scribe</span></h1>
         {currentUser && (
           <div style={{ 
-            marginTop: '12px', 
-            fontSize: '14px', 
-            color: 'rgba(255,255,255,0.8)',
-            textAlign: 'center'
+            marginTop: '12px', fontSize: '14px', color: 'rgba(255,255,255,0.8)', textAlign: 'center'
           }}>
-            {currentUser.name}
-            <br />
+            {currentUser.name}<br />
             <span style={{ fontSize: '12px', color: 'var(--aayu-lime)' }}>
               {currentUser.role.replace('_', ' ').toUpperCase()}
             </span>
@@ -584,16 +488,12 @@ Please convert this into structured medical notes.`
     </div>
   );
 
-  // Render patients page
   const renderPatientsPage = () => (
     <div className="content-container">
       <div className="page-header">
         <h2 className="page-title">Patient Management</h2>
         {authService.hasPermission('add_patients') && (
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowPatientModal(true)}
-          >
+          <button className="btn btn-primary" onClick={() => setShowPatientModal(true)}>
             Add New Patient
           </button>
         )}
@@ -610,39 +510,22 @@ Please convert this into structured medical notes.`
           onChange={(e) => setSearchTerm(e.target.value)}
         />
         
-        <div className="search-results">
-          {filteredPatients.length} patient(s) found
-        </div>
+        <div className="search-results">{filteredPatients.length} patient(s) found</div>
 
         <div className="patient-list">
           {filteredPatients.map(patient => (
-            <div 
-              key={patient.id} 
-              className="patient-card"
-              onClick={() => setSelectedPatient(patient)}
-            >
-              <div 
-                className="patient-avatar"
-                style={{ backgroundColor: getAvatarColor(patient) }}
-              >
+            <div key={patient.id} className="patient-card" onClick={() => setSelectedPatient(patient)}>
+              <div className="patient-avatar" style={{ backgroundColor: getAvatarColor(patient) }}>
                 {getPatientInitials(patient)}
               </div>
               
               <div className="patient-info">
-                <div className="patient-name">
-                  {patient.firstName} {patient.lastName}
-                </div>
-                <div className="patient-id">
-                  Patient ID: {patient.id}
-                </div>
-                <div className="patient-dob">
-                  DOB: {patient.dateOfBirth}
-                </div>
+                <div className="patient-name">{patient.firstName} {patient.lastName}</div>
+                <div className="patient-id">Patient ID: {patient.id}</div>
+                <div className="patient-dob">DOB: {patient.dateOfBirth}</div>
               </div>
               
-              <div className="patient-visits">
-                {patient.visits.length} visits
-              </div>
+              <div className="patient-visits">{patient.visits.length} visits</div>
             </div>
           ))}
         </div>
@@ -654,14 +537,10 @@ Please convert this into structured medical notes.`
         )}
       </div>
 
-      {/* Patient Detail */}
       {selectedPatient && (
         <div className="card">
           <div className="patient-header">
-            <div 
-              className="patient-header-avatar"
-              style={{ backgroundColor: getAvatarColor(selectedPatient) }}
-            >
+            <div className="patient-header-avatar" style={{ backgroundColor: getAvatarColor(selectedPatient) }}>
               {getPatientInitials(selectedPatient)}
             </div>
             <div className="patient-header-info">
@@ -707,9 +586,7 @@ Please convert this into structured medical notes.`
                     <div className="visit-date">{visit.date}</div>
                     <div className="visit-meta">
                       Time: {visit.time}
-                      {visit.createdByName && (
-                        <span> • By: {visit.createdByName}</span>
-                      )}
+                      {visit.createdByName && <span> • By: {visit.createdByName}</span>}
                     </div>
                   </div>
                   <div className="visit-arrow">→</div>
@@ -722,7 +599,6 @@ Please convert this into structured medical notes.`
     </div>
   );
 
-  // Render recording page
   const renderRecordingPage = () => {
     if (!authService.hasPermission('scribe')) {
       return (
@@ -743,9 +619,7 @@ Please convert this into structured medical notes.`
         <div className="page-header">
           <h2 className="page-title">Recording Session</h2>
           {selectedPatient && (
-            <div>
-              Recording for: <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
-            </div>
+            <div>Recording for: <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong></div>
           )}
         </div>
 
@@ -762,42 +636,23 @@ Please convert this into structured medical notes.`
               <h3 className="card-title">Recording Controls</h3>
               
               <div className="recording-controls">
-                <button 
-                  className="btn btn-record"
-                  onClick={startRecording}
-                  disabled={isRecording}
-                >
+                <button className="btn btn-record" onClick={startRecording} disabled={isRecording}>
                   {isRecording ? 'Recording...' : 'Start Recording'}
                 </button>
                 
-                <button 
-                  className="btn btn-stop"
-                  onClick={stopRecording}
-                  disabled={!isRecording}
-                >
+                <button className="btn btn-stop" onClick={stopRecording} disabled={!isRecording}>
                   Stop Recording
                 </button>
                 
-                <button 
-                  className="btn btn-generate"
-                  onClick={generateNotes}
-                  disabled={!transcript || isProcessing}
-                >
+                <button className="btn btn-generate" onClick={generateNotes} disabled={!transcript || isProcessing}>
                   {isProcessing ? 'Generating...' : 'Generate Notes'}
                 </button>
                 
-                <button 
-                  className="btn btn-save"
-                  onClick={saveVisit}
-                  disabled={!medicalNotes}
-                >
+                <button className="btn btn-save" onClick={saveVisit} disabled={!medicalNotes}>
                   Save Visit
                 </button>
 
-                <button 
-                  className="btn btn-secondary"
-                  onClick={clearSession}
-                >
+                <button className="btn btn-secondary" onClick={clearSession}>
                   Clear Session
                 </button>
               </div>
@@ -837,15 +692,11 @@ Please convert this into structured medical notes.`
     );
   };
 
-  // Render users page (admin and super admin only)
   const renderUsersPage = () => (
     <div className="content-container">
       <div className="page-header">
         <h2 className="page-title">User Management</h2>
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowCreateUserModal(true)}
-        >
+        <button className="btn btn-primary" onClick={() => setShowCreateUserModal(true)}>
           Add New User
         </button>
       </div>
@@ -866,7 +717,6 @@ Please convert this into structured medical notes.`
     </div>
   );
 
-  // Render settings page
   const renderSettingsPage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -908,8 +758,7 @@ Please convert this into structured medical notes.`
           <div className="form-group">
             <label className="form-label">Azure OpenAI Endpoint</label>
             <input 
-              type="text" 
-              className="form-input" 
+              type="text" className="form-input" 
               placeholder="https://your-resource.openai.azure.com/"
               value={apiSettings.openaiEndpoint}
               onChange={(e) => setApiSettings({...apiSettings, openaiEndpoint: e.target.value})}
@@ -919,8 +768,7 @@ Please convert this into structured medical notes.`
           <div className="form-group">
             <label className="form-label">Azure OpenAI API Key</label>
             <input 
-              type={showApiKeys ? "text" : "password"} 
-              className="form-input" 
+              type={showApiKeys ? "text" : "password"} className="form-input" 
               placeholder="Enter your OpenAI key"
               value={apiSettings.openaiKey}
               onChange={(e) => setApiSettings({...apiSettings, openaiKey: e.target.value})}
@@ -930,9 +778,7 @@ Please convert this into structured medical notes.`
           <div className="form-group">
             <label className="form-label">OpenAI Deployment Name</label>
             <input 
-              type="text" 
-              className="form-input" 
-              placeholder="gpt-4"
+              type="text" className="form-input" placeholder="gpt-4"
               value={apiSettings.openaiDeployment}
               onChange={(e) => setApiSettings({...apiSettings, openaiDeployment: e.target.value})}
             />
@@ -941,9 +787,7 @@ Please convert this into structured medical notes.`
           <div className="form-group">
             <label className="form-label">API Version</label>
             <input 
-              type="text" 
-              className="form-input" 
-              placeholder="2024-08-01-preview"
+              type="text" className="form-input" placeholder="2024-08-01-preview"
               value={apiSettings.openaiApiVersion}
               onChange={(e) => setApiSettings({...apiSettings, openaiApiVersion: e.target.value})}
             />
@@ -952,8 +796,7 @@ Please convert this into structured medical notes.`
           <div className="form-group">
             <label>
               <input 
-                type="checkbox" 
-                checked={showApiKeys}
+                type="checkbox" checked={showApiKeys}
                 onChange={(e) => setShowApiKeys(e.target.checked)}
                 style={{marginRight: '8px'}}
               />
@@ -961,10 +804,7 @@ Please convert this into structured medical notes.`
             </label>
           </div>
 
-          <button 
-            className="btn btn-success"
-            onClick={() => saveApiSettings(apiSettings)}
-          >
+          <button className="btn btn-success" onClick={() => saveApiSettings(apiSettings)}>
             Save Settings
           </button>
         </div>
@@ -987,7 +827,6 @@ Please convert this into structured medical notes.`
         )}
       </main>
 
-      {/* Login Modal */}
       {showLoginModal && (
         <div className="modal-backdrop">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1002,8 +841,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Username</label>
                 <input
-                  type="text"
-                  className="form-input"
+                  type="text" className="form-input"
                   value={loginForm.username}
                   onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
                   placeholder="Enter your username"
@@ -1014,8 +852,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Password</label>
                 <input
-                  type="password"
-                  className="form-input"
+                  type="password" className="form-input"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
                   placeholder="Enter your password"
@@ -1030,19 +867,13 @@ Please convert this into structured medical notes.`
               )}
 
               <div className="modal-actions">
-                <button type="submit" className="btn btn-primary">
-                  Login
-                </button>
+                <button type="submit" className="btn btn-primary">Login</button>
               </div>
             </form>
 
             <div style={{ 
-              marginTop: '24px', 
-              padding: '16px', 
-              backgroundColor: 'var(--aayu-pale-lime)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              textAlign: 'center'
+              marginTop: '24px', padding: '16px', backgroundColor: 'var(--aayu-pale-lime)',
+              borderRadius: '8px', fontSize: '14px', textAlign: 'center'
             }}>
               <strong>Available Users:</strong><br />
               darshan@aayuwell.com (Super Admin)<br />
@@ -1052,7 +883,6 @@ Please convert this into structured medical notes.`
         </div>
       )}
 
-      {/* Create User Modal */}
       {showCreateUserModal && (
         <div className="modal-backdrop" onClick={() => setShowCreateUserModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1061,17 +891,14 @@ Please convert this into structured medical notes.`
                 <h3 className="modal-title">Create New User</h3>
                 <p className="modal-subtitle">Note: Users must be added to environment config permanently</p>
               </div>
-              <button className="modal-close" onClick={() => setShowCreateUserModal(false)}>
-                Close
-              </button>
+              <button className="modal-close" onClick={() => setShowCreateUserModal(false)}>Close</button>
             </div>
 
             <form onSubmit={handleCreateUser}>
               <div className="form-group">
                 <label className="form-label">Username (Email) *</label>
                 <input
-                  type="text"
-                  className="form-input"
+                  type="text" className="form-input"
                   value={newUser.username}
                   onChange={(e) => setNewUser({...newUser, username: e.target.value})}
                   placeholder="user@example.com"
@@ -1082,8 +909,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Full Name *</label>
                 <input
-                  type="text"
-                  className="form-input"
+                  type="text" className="form-input"
                   value={newUser.name}
                   onChange={(e) => setNewUser({...newUser, name: e.target.value})}
                   placeholder="Enter full name"
@@ -1111,8 +937,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Password *</label>
                 <input
-                  type="password"
-                  className="form-input"
+                  type="password" className="form-input"
                   value={newUser.password}
                   onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                   placeholder="Enter password"
@@ -1123,8 +948,7 @@ Please convert this into structured medical notes.`
               <div className="form-group">
                 <label className="form-label">Confirm Password *</label>
                 <input
-                  type="password"
-                  className="form-input"
+                  type="password" className="form-input"
                   value={newUser.confirmPassword}
                   onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
                   placeholder="Confirm password"
@@ -1136,16 +960,13 @@ Please convert this into structured medical notes.`
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateUserModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-success">
-                  Log User Info
-                </button>
+                <button type="submit" className="btn btn-success">Log User Info</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Add Patient Modal */}
       {showPatientModal && (
         <div className="modal-backdrop" onClick={() => setShowPatientModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1154,16 +975,13 @@ Please convert this into structured medical notes.`
                 <h3 className="modal-title">Add New Patient</h3>
                 <p className="modal-subtitle">Enter patient information</p>
               </div>
-              <button className="modal-close" onClick={() => setShowPatientModal(false)}>
-                Close
-              </button>
+              <button className="modal-close" onClick={() => setShowPatientModal(false)}>Close</button>
             </div>
 
             <div className="form-group">
               <label className="form-label">First Name *</label>
               <input
-                type="text"
-                className="form-input"
+                type="text" className="form-input"
                 value={newPatient.firstName}
                 onChange={(e) => setNewPatient({...newPatient, firstName: e.target.value})}
                 placeholder="Enter first name"
@@ -1173,8 +991,7 @@ Please convert this into structured medical notes.`
             <div className="form-group">
               <label className="form-label">Last Name *</label>
               <input
-                type="text"
-                className="form-input"
+                type="text" className="form-input"
                 value={newPatient.lastName}
                 onChange={(e) => setNewPatient({...newPatient, lastName: e.target.value})}
                 placeholder="Enter last name"
@@ -1184,8 +1001,7 @@ Please convert this into structured medical notes.`
             <div className="form-group">
               <label className="form-label">Date of Birth *</label>
               <input
-                type="date"
-                className="form-input"
+                type="date" className="form-input"
                 value={newPatient.dateOfBirth}
                 onChange={(e) => setNewPatient({...newPatient, dateOfBirth: e.target.value})}
               />
@@ -1215,15 +1031,12 @@ Please convert this into structured medical notes.`
               <button className="btn btn-secondary" onClick={() => setShowPatientModal(false)}>
                 Cancel
               </button>
-              <button className="btn btn-success" onClick={addPatient}>
-                Save Patient
-              </button>
+              <button className="btn btn-success" onClick={addPatient}>Save Patient</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Visit Detail Modal */}
       {showVisitModal && selectedVisit && (
         <div className="modal-backdrop" onClick={() => setShowVisitModal(false)}>
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
@@ -1235,26 +1048,18 @@ Please convert this into structured medical notes.`
                   {selectedVisit.createdByName && ` • Created by: ${selectedVisit.createdByName}`}
                 </p>
               </div>
-              <button className="modal-close" onClick={() => setShowVisitModal(false)}>
-                Close
-              </button>
+              <button className="modal-close" onClick={() => setShowVisitModal(false)}>Close</button>
             </div>
 
-            <div className="visit-notes">
-              {selectedVisit.notes}
-            </div>
+            <div className="visit-notes">{selectedVisit.notes}</div>
 
             <div className="transcript-section">
               <h4>Original Transcript</h4>
-              <div className="transcript-content">
-                {selectedVisit.transcript}
-              </div>
+              <div className="transcript-content">{selectedVisit.transcript}</div>
             </div>
 
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowVisitModal(false)}>
-                Close
-              </button>
+              <button className="btn btn-secondary" onClick={() => setShowVisitModal(false)}>Close</button>
             </div>
           </div>
         </div>
