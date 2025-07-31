@@ -1,9 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
+import authService from './authService';
 import './App.css';
 
 function App() {
+  // Authentication states
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({
+    username: '',
+    password: '',
+    confirmPassword: '',
+    name: '',
+    role: 'medical_provider'
+  });
+
   // Navigation state
   const [activeTab, setActiveTab] = useState('patients');
   
@@ -30,7 +46,7 @@ function App() {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState('Configure API settings first');
+  const [status, setStatus] = useState('Please log in to continue');
 
   // API Settings states
   const [apiSettings, setApiSettings] = useState({
@@ -47,39 +63,228 @@ function App() {
   const recognizerRef = useRef(null);
   const audioConfigRef = useRef(null);
 
-  // Load data from localStorage
+  // Initialize authentication and load data
   useEffect(() => {
-    try {
-      const savedPatients = localStorage.getItem('medicalScribePatients');
-      const savedApiSettings = localStorage.getItem('medicalScribeApiSettings');
-      
-      if (savedPatients) {
-        setPatients(JSON.parse(savedPatients));
-      }
-      
-      if (savedApiSettings) {
-        const settings = JSON.parse(savedApiSettings);
-        setApiSettings(settings);
-        if (settings.speechKey && settings.openaiKey) {
-          setStatus('Ready to begin');
+    const initializeApp = async () => {
+      setIsLoading(true);
+      try {
+        // First, test environment variables
+        console.log('Testing environment variables...');
+        const connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
+        
+        if (!connectionString || connectionString === 'your_connection_string_here') {
+          console.error('Azure connection string not found in environment variables');
+          alert('Azure connection string not configured. Please check GitHub Codespace secrets.');
+          setShowLoginModal(true);
+          setIsLoading(false);
+          return;
         }
+
+        console.log('Connection string found, initializing authService...');
+        
+        // Wait for authService to be fully initialized
+        let retries = 0;
+        while (!authService.isReady() && retries < 10) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          retries++;
+        }
+
+        if (!authService.isReady()) {
+          throw new Error('AuthService failed to initialize after 10 seconds');
+        }
+
+        console.log('AuthService ready, checking for existing user...');
+        
+        // Check if user is already logged in
+        const user = await authService.loadCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setStatus('Ready to begin');
+          await loadPatientsFromAzure();
+        } else {
+          setShowLoginModal(true);
+        }
+        
+        // Load API settings from localStorage (backward compatibility)
+        const savedApiSettings = localStorage.getItem('medicalScribeApiSettings');
+        if (savedApiSettings) {
+          const settings = JSON.parse(savedApiSettings);
+          setApiSettings(settings);
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+        alert('Failed to initialize app: ' + error.message + '. Falling back to login screen.');
+        setShowLoginModal(true);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.warn('LocalStorage not available');
-    }
+    };
+
+    initializeApp();
   }, []);
 
-  // Save patients to localStorage
-  const savePatients = (updatedPatients) => {
-    setPatients(updatedPatients);
+  // Load patients from Azure Table Storage
+  const loadPatientsFromAzure = async () => {
     try {
-      localStorage.setItem('medicalScribePatients', JSON.stringify(updatedPatients));
+      const azurePatientsRaw = await authService.getPatients();
+      
+      // Convert Azure entities to app format
+      const azurePatients = azurePatientsRaw.map(entity => ({
+        id: parseInt(entity.rowKey),
+        firstName: entity.firstName,
+        lastName: entity.lastName,
+        dateOfBirth: entity.dateOfBirth,
+        medicalHistory: entity.medicalHistory || '',
+        medications: entity.medications || '',
+        visits: [], // Will be loaded separately
+        createdAt: entity.createdAt
+      }));
+
+      // Load visits for each patient
+      for (const patient of azurePatients) {
+        const visitsRaw = await authService.getVisits(patient.id);
+        patient.visits = visitsRaw.map(entity => ({
+          id: parseInt(entity.rowKey),
+          date: entity.date,
+          time: entity.time,
+          transcript: entity.transcript,
+          notes: entity.notes,
+          timestamp: entity.timestamp,
+          createdBy: entity.createdBy,
+          createdByName: entity.createdByName
+        }));
+      }
+
+      setPatients(azurePatients);
+
+      // Migrate localStorage data if exists and no Azure data
+      if (azurePatients.length === 0) {
+        await migrateLocalStorageData();
+      }
     } catch (error) {
-      console.warn('Cannot save to localStorage');
+      console.error('Failed to load patients from Azure:', error);
+      // Fallback to localStorage if Azure fails
+      loadPatientsFromLocalStorage();
     }
   };
 
-  // Save API settings
+  // Migrate existing localStorage data to Azure
+  const migrateLocalStorageData = async () => {
+    try {
+      const savedPatients = localStorage.getItem('medicalScribePatients');
+      if (savedPatients) {
+        const localPatients = JSON.parse(savedPatients);
+        
+        for (const patient of localPatients) {
+          // Save patient to Azure
+          await authService.savePatient(patient);
+          
+          // Save visits to Azure
+          for (const visit of patient.visits || []) {
+            await authService.saveVisit(patient.id, visit);
+          }
+        }
+        
+        // Reload from Azure
+        await loadPatientsFromAzure();
+        
+        // Clear localStorage after successful migration
+        localStorage.removeItem('medicalScribePatients');
+        console.log('Successfully migrated localStorage data to Azure');
+      }
+    } catch (error) {
+      console.error('Migration failed:', error);
+    }
+  };
+
+  // Fallback to localStorage (backward compatibility)
+  const loadPatientsFromLocalStorage = () => {
+    try {
+      const savedPatients = localStorage.getItem('medicalScribePatients');
+      if (savedPatients) {
+        setPatients(JSON.parse(savedPatients));
+      }
+    } catch (error) {
+      console.warn('Could not load from localStorage');
+    }
+  };
+
+  // Login handler
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    try {
+      const user = await authService.login(loginForm.username, loginForm.password);
+      setCurrentUser(user);
+      setShowLoginModal(false);
+      setLoginForm({ username: '', password: '' });
+      setStatus('Login successful - Ready to begin');
+      
+      await loadPatientsFromAzure();
+    } catch (error) {
+      setLoginError(error.message);
+    }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    authService.logout();
+    setCurrentUser(null);
+    setPatients([]);
+    setSelectedPatient(null);
+    setTranscript('');
+    setMedicalNotes('');
+    setStatus('Please log in to continue');
+    setShowLoginModal(true);
+  };
+
+  // Create user handler
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    
+    if (newUser.password !== newUser.confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    try {
+      await authService.createUser(newUser);
+      setShowCreateUserModal(false);
+      setNewUser({
+        username: '',
+        password: '',
+        confirmPassword: '',
+        name: '',
+        role: 'medical_provider'
+      });
+      alert('User created successfully');
+    } catch (error) {
+      alert('Failed to create user: ' + error.message);
+    }
+  };
+
+  // Save patients to Azure (replacing localStorage)
+  const savePatients = async (updatedPatients) => {
+    setPatients(updatedPatients);
+    
+    // Save to Azure instead of localStorage
+    try {
+      for (const patient of updatedPatients) {
+        await authService.savePatient(patient);
+      }
+    } catch (error) {
+      console.error('Failed to save to Azure:', error);
+      // Fallback to localStorage
+      try {
+        localStorage.setItem('medicalScribePatients', JSON.stringify(updatedPatients));
+      } catch (e) {
+        console.warn('Cannot save to localStorage');
+      }
+    }
+  };
+
+  // Save API settings (keep localStorage for backward compatibility)
   const saveApiSettings = (settings) => {
     setApiSettings(settings);
     try {
@@ -93,7 +298,12 @@ function App() {
   };
 
   // Add new patient
-  const addPatient = () => {
+  const addPatient = async () => {
+    if (!authService.hasPermission('add_patients')) {
+      alert('You do not have permission to add patients');
+      return;
+    }
+
     if (!newPatient.firstName || !newPatient.lastName || !newPatient.dateOfBirth) {
       alert('Please fill in all required fields');
       return;
@@ -106,7 +316,7 @@ function App() {
       createdAt: new Date().toISOString()
     };
 
-    savePatients([...patients, patient]);
+    await savePatients([...patients, patient]);
     setNewPatient({
       firstName: '',
       lastName: '',
@@ -119,6 +329,11 @@ function App() {
 
   // Real Azure Speech SDK recording
   const startRecording = async () => {
+    if (!authService.hasPermission('scribe')) {
+      setStatus('You do not have permission to record');
+      return;
+    }
+
     if (!selectedPatient) {
       setStatus('Please select a patient first');
       return;
@@ -216,6 +431,11 @@ function App() {
 
   // Real Azure OpenAI integration
   const generateNotes = async () => {
+    if (!authService.hasPermission('scribe')) {
+      setStatus('You do not have permission to generate notes');
+      return;
+    }
+
     if (!transcript.trim()) {
       setStatus('No transcript available. Please record first.');
       return;
@@ -302,9 +522,14 @@ Please convert this into structured medical notes.`
     }
   };
 
-  const saveVisit = () => {
+  const saveVisit = async () => {
     if (!selectedPatient || !medicalNotes) {
       setStatus('Cannot save - missing patient or notes');
+      return;
+    }
+
+    if (!authService.hasPermission('scribe')) {
+      setStatus('You do not have permission to save visits');
       return;
     }
 
@@ -317,15 +542,24 @@ Please convert this into structured medical notes.`
       timestamp: new Date().toISOString()
     };
 
-    const updatedPatients = patients.map(p => 
-      p.id === selectedPatient.id 
-        ? { ...p, visits: [...p.visits, visit] }
-        : p
-    );
+    try {
+      // Save to Azure
+      await authService.saveVisit(selectedPatient.id, visit);
+      
+      // Update local state
+      const updatedPatients = patients.map(p => 
+        p.id === selectedPatient.id 
+          ? { ...p, visits: [...p.visits, { ...visit, createdBy: currentUser.id, createdByName: currentUser.name }] }
+          : p
+      );
 
-    savePatients(updatedPatients);
-    setSelectedPatient(updatedPatients.find(p => p.id === selectedPatient.id));
-    setStatus('Visit saved successfully');
+      setPatients(updatedPatients);
+      setSelectedPatient(updatedPatients.find(p => p.id === selectedPatient.id));
+      setStatus('Visit saved successfully');
+    } catch (error) {
+      console.error('Failed to save visit:', error);
+      setStatus('Failed to save visit: ' + error.message);
+    }
   };
 
   // Filter patients based on search
@@ -353,6 +587,25 @@ Please convert this into structured medical notes.`
     setStatus('Session cleared - Ready to record');
   };
 
+  // Show loading screen
+  if (isLoading) {
+    return (
+      <div className="app-container">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          backgroundColor: 'var(--aayu-light-gray)',
+          fontSize: '18px',
+          color: 'var(--aayu-navy)'
+        }}>
+          Loading Aayu AI Scribe...
+        </div>
+      </div>
+    );
+  }
+
   // Render navigation
   const renderSidebar = () => (
     <div className="sidebar">
@@ -360,6 +613,20 @@ Please convert this into structured medical notes.`
         <h1 className="sidebar-title">
           <span>Aayu AI Scribe</span>
         </h1>
+        {currentUser && (
+          <div style={{ 
+            marginTop: '12px', 
+            fontSize: '14px', 
+            color: 'rgba(255,255,255,0.8)',
+            textAlign: 'center'
+          }}>
+            {currentUser.name}
+            <br />
+            <span style={{ fontSize: '12px', color: 'var(--aayu-lime)' }}>
+              {currentUser.role.replace('_', ' ').toUpperCase()}
+            </span>
+          </div>
+        )}
       </div>
       
       <nav className="sidebar-nav">
@@ -373,6 +640,11 @@ Please convert this into structured medical notes.`
         <button 
           className={`nav-button ${activeTab === 'recording' ? 'active' : ''}`}
           onClick={() => setActiveTab('recording')}
+          disabled={!authService.hasPermission('scribe')}
+          style={{
+            opacity: !authService.hasPermission('scribe') ? 0.5 : 1,
+            cursor: !authService.hasPermission('scribe') ? 'not-allowed' : 'pointer'
+          }}
         >
           Recording
         </button>
@@ -383,10 +655,27 @@ Please convert this into structured medical notes.`
         >
           Settings
         </button>
+
+        {authService.hasPermission('add_users') && (
+          <button 
+            className={`nav-button ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            Users
+          </button>
+        )}
+
+        <button 
+          className="nav-button"
+          onClick={handleLogout}
+          style={{ marginTop: 'auto', backgroundColor: 'rgba(255,255,255,0.1)' }}
+        >
+          Logout
+        </button>
       </nav>
       
       <div className="sidebar-footer">
-        Medical Scribe AI v2.0<br />
+        Medical Scribe AI v2.1<br />
         Secure • HIPAA Compliant
       </div>
     </div>
@@ -397,12 +686,14 @@ Please convert this into structured medical notes.`
     <div className="content-container">
       <div className="page-header">
         <h2 className="page-title">Patient Management</h2>
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowPatientModal(true)}
-        >
-          Add New Patient
-        </button>
+        {authService.hasPermission('add_patients') && (
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowPatientModal(true)}
+          >
+            Add New Patient
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -455,7 +746,7 @@ Please convert this into structured medical notes.`
 
         {filteredPatients.length === 0 && (
           <div className="empty-state">
-            No patients found. Add your first patient to get started.
+            No patients found. {authService.hasPermission('add_patients') ? 'Add your first patient to get started.' : 'Contact an administrator to add patients.'}
           </div>
         )}
       </div>
@@ -499,13 +790,24 @@ Please convert this into structured medical notes.`
                   key={visit.id} 
                   className="visit-item"
                   onClick={() => {
-                    setSelectedVisit(visit);
-                    setShowVisitModal(true);
+                    if (authService.hasPermission('read_all_notes') || authService.canEditNotes(visit.createdBy)) {
+                      setSelectedVisit(visit);
+                      setShowVisitModal(true);
+                    }
+                  }}
+                  style={{
+                    cursor: (authService.hasPermission('read_all_notes') || authService.canEditNotes(visit.createdBy)) ? 'pointer' : 'not-allowed',
+                    opacity: (authService.hasPermission('read_all_notes') || authService.canEditNotes(visit.createdBy)) ? 1 : 0.6
                   }}
                 >
                   <div>
                     <div className="visit-date">{visit.date}</div>
-                    <div className="visit-meta">Time: {visit.time}</div>
+                    <div className="visit-meta">
+                      Time: {visit.time}
+                      {visit.createdByName && (
+                        <span> • By: {visit.createdByName}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="visit-arrow">→</div>
                 </div>
@@ -518,101 +820,137 @@ Please convert this into structured medical notes.`
   );
 
   // Render recording page
-  const renderRecordingPage = () => (
-    <div className="content-container">
-      <div className="page-header">
-        <h2 className="page-title">Recording Session</h2>
-        {selectedPatient && (
-          <div>
-            Recording for: <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+  const renderRecordingPage = () => {
+    if (!authService.hasPermission('scribe')) {
+      return (
+        <div className="content-container">
+          <div className="page-header">
+            <h2 className="page-title">Recording Session</h2>
+          </div>
+          <div className="card">
+            <h3 className="card-title">Access Denied</h3>
+            <p>You do not have permission to access the recording functionality. Contact your administrator if you need access.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="content-container">
+        <div className="page-header">
+          <h2 className="page-title">Recording Session</h2>
+          {selectedPatient && (
+            <div>
+              Recording for: <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+            </div>
+          )}
+        </div>
+
+        {!selectedPatient && (
+          <div className="card">
+            <h3 className="card-title">Select a Patient</h3>
+            <p>Please select a patient from the Patients tab before starting a recording session.</p>
           </div>
         )}
+
+        {selectedPatient && (
+          <>
+            <div className="card">
+              <h3 className="card-title">Recording Controls</h3>
+              
+              <div className="recording-controls">
+                <button 
+                  className="btn btn-record"
+                  onClick={startRecording}
+                  disabled={isRecording}
+                >
+                  {isRecording ? 'Recording...' : 'Start Recording'}
+                </button>
+                
+                <button 
+                  className="btn btn-stop"
+                  onClick={stopRecording}
+                  disabled={!isRecording}
+                >
+                  Stop Recording
+                </button>
+                
+                <button 
+                  className="btn btn-generate"
+                  onClick={generateNotes}
+                  disabled={!transcript || isProcessing}
+                >
+                  {isProcessing ? 'Generating...' : 'Generate Notes'}
+                </button>
+                
+                <button 
+                  className="btn btn-save"
+                  onClick={saveVisit}
+                  disabled={!medicalNotes}
+                >
+                  Save Visit
+                </button>
+
+                <button 
+                  className="btn btn-secondary"
+                  onClick={clearSession}
+                >
+                  Clear Session
+                </button>
+              </div>
+
+              <div className={`status-indicator ${isRecording ? 'recording' : isProcessing ? 'processing' : 'ready'}`}>
+                {status}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 className="card-title">Live Transcript</h3>
+              <div className="transcript-container">
+                {transcript || interimTranscript ? (
+                  <span>
+                    {transcript}
+                    {interimTranscript && (
+                      <span style={{color: '#888', fontStyle: 'italic'}}>
+                        {transcript ? ' ' : ''}{interimTranscript}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="transcript-placeholder">Transcript will appear here as you speak...</span>
+                )}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 className="card-title">Generated Medical Notes</h3>
+              <div className="notes-container">
+                {medicalNotes || <span className="notes-placeholder">AI-generated medical notes will appear here...</span>}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // Render users page (admin and super admin only)
+  const renderUsersPage = () => (
+    <div className="content-container">
+      <div className="page-header">
+        <h2 className="page-title">User Management</h2>
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowCreateUserModal(true)}
+        >
+          Add New User
+        </button>
       </div>
 
-      {!selectedPatient && (
-        <div className="card">
-          <h3 className="card-title">Select a Patient</h3>
-          <p>Please select a patient from the Patients tab before starting a recording session.</p>
-        </div>
-      )}
-
-      {selectedPatient && (
-        <>
-          <div className="card">
-            <h3 className="card-title">Recording Controls</h3>
-            
-            <div className="recording-controls">
-              <button 
-                className="btn btn-record"
-                onClick={startRecording}
-                disabled={isRecording}
-              >
-                {isRecording ? 'Recording...' : 'Start Recording'}
-              </button>
-              
-              <button 
-                className="btn btn-stop"
-                onClick={stopRecording}
-                disabled={!isRecording}
-              >
-                Stop Recording
-              </button>
-              
-              <button 
-                className="btn btn-generate"
-                onClick={generateNotes}
-                disabled={!transcript || isProcessing}
-              >
-                {isProcessing ? 'Generating...' : 'Generate Notes'}
-              </button>
-              
-              <button 
-                className="btn btn-save"
-                onClick={saveVisit}
-                disabled={!medicalNotes}
-              >
-                Save Visit
-              </button>
-
-              <button 
-                className="btn btn-secondary"
-                onClick={clearSession}
-              >
-                Clear Session
-              </button>
-            </div>
-
-            <div className={`status-indicator ${isRecording ? 'recording' : isProcessing ? 'processing' : 'ready'}`}>
-              {status}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">Live Transcript</h3>
-            <div className="transcript-container">
-              {transcript || interimTranscript ? (
-                <span>
-                  {transcript}
-                  {interimTranscript && (
-                    <span style={{color: '#888', fontStyle: 'italic'}}>
-                      {transcript ? ' ' : ''}{interimTranscript}
-                    </span>
-                  )}
-                </span>
-              ) : (
-                <span className="transcript-placeholder">Transcript will appear here as you speak...</span>
-              )}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">Generated Medical Notes</h3>
-            <div className="notes-container">
-              {medicalNotes || <span className="notes-placeholder">AI-generated medical notes will appear here...</span>}
-            </div>
-          </div>
-        </>
-      )}
+      <div className="card">
+        <h3 className="card-title">User Administration</h3>
+        <p>User management functionality coming soon. For now, users can be created using the "Add New User" button.</p>
+      </div>
     </div>
   );
 
@@ -724,13 +1062,176 @@ Please convert this into structured medical notes.`
 
   return (
     <div className="app-container">
-      {renderSidebar()}
+      {currentUser && renderSidebar()}
       
       <main className="main-content">
-        {activeTab === 'patients' && renderPatientsPage()}
-        {activeTab === 'recording' && renderRecordingPage()}
-        {activeTab === 'settings' && renderSettingsPage()}
+        {currentUser && (
+          <>
+            {activeTab === 'patients' && renderPatientsPage()}
+            {activeTab === 'recording' && renderRecordingPage()}
+            {activeTab === 'settings' && renderSettingsPage()}
+            {activeTab === 'users' && authService.hasPermission('add_users') && renderUsersPage()}
+          </>
+        )}
       </main>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Login to Aayu AI Scribe</h3>
+                <p className="modal-subtitle">Enter your credentials to continue</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleLogin}>
+              <div className="form-group">
+                <label className="form-label">Username</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={loginForm.username}
+                  onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
+                  placeholder="Enter your username"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+
+              {loginError && (
+                <div style={{ color: 'var(--aayu-coral)', marginBottom: '16px', fontSize: '14px' }}>
+                  {loginError}
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button type="submit" className="btn btn-primary">
+                  Login
+                </button>
+              </div>
+            </form>
+
+            <div style={{ 
+              marginTop: '24px', 
+              padding: '16px', 
+              backgroundColor: 'var(--aayu-pale-lime)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              textAlign: 'center'
+            }}>
+              <strong>Default Super Admin:</strong><br />
+              Username: darshan@aayuwell.com<br />
+              Password: Aayuscribe1212@
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateUserModal && (
+        <div className="modal-backdrop" onClick={() => setShowCreateUserModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Create New User</h3>
+                <p className="modal-subtitle">Add a new user to the system</p>
+              </div>
+              <button className="modal-close" onClick={() => setShowCreateUserModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser}>
+              <div className="form-group">
+                <label className="form-label">Username (Email) *</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                  placeholder="Enter full name"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Role *</label>
+                <select
+                  className="form-input"
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                  required
+                >
+                  <option value="medical_provider">Medical Provider</option>
+                  <option value="support_staff">Support Staff</option>
+                  <option value="admin">Admin</option>
+                  {currentUser?.role === 'super_admin' && (
+                    <option value="super_admin">Super Admin</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password *</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                  placeholder="Enter password"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm Password *</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  value={newUser.confirmPassword}
+                  onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
+                  placeholder="Confirm password"
+                  required
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateUserModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-success">
+                  Create User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Patient Modal */}
       {showPatientModal && (
@@ -817,7 +1318,10 @@ Please convert this into structured medical notes.`
             <div className="modal-header">
               <div>
                 <h3 className="modal-title">Visit Details</h3>
-                <p className="modal-subtitle">{selectedVisit.date} at {selectedVisit.time}</p>
+                <p className="modal-subtitle">
+                  {selectedVisit.date} at {selectedVisit.time}
+                  {selectedVisit.createdByName && ` • Created by: ${selectedVisit.createdByName}`}
+                </p>
               </div>
               <button className="modal-close" onClick={() => setShowVisitModal(false)}>
                 Close
