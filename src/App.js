@@ -280,6 +280,12 @@ function App() {
     setLoginError('');
     
     try {
+      console.log('Login attempt - ensuring AuthService is ready...');
+      
+      // CRITICAL FIX: Ensure AuthService is ready before login
+      await authService.ready;
+      console.log('✅ AuthService ready for login');
+      
       const user = await authService.login(loginForm.username, loginForm.password);
       setCurrentUser(user);
       setShowLoginModal(false);
@@ -288,6 +294,7 @@ function App() {
       
       await reloadPatientsFromAzure();
     } catch (error) {
+      console.error('Login failed:', error);
       setLoginError(error.message);
     }
   };
