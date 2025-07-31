@@ -14,49 +14,60 @@ class AuthService {
     this.inactivityTimer = null;
     this.isInitialized = false;
     
-    // Initialize asynchronously
-    this.initialize();
+    // KEY FIX: Create a Promise that resolves when initialization is complete
+    this.ready = this.initialize();
   }
 
   // Async initialization method
   async initialize() {
     try {
+      console.log('=== AuthService Debug Info ===');
+      console.log('All environment variables:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+      console.log('Connection string variable:', process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING ? 'Found' : 'Missing');
       console.log('Starting AuthService initialization...');
       
       // Get connection string from environment
       this.connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
       
-      if (!this.connectionString || this.connectionString === 'your_connection_string_here') {
-        console.warn('Azure connection string not configured');
-        this.isInitialized = false;
-        return;
+      if (!this.connectionString || this.connectionString === 'your_connection_string_here' || this.connectionString === 'your_actual_connection_string_here') {
+        throw new Error('Azure connection string not configured or still has placeholder text');
       }
 
-      console.log('Connection string found, creating table clients...');
+      console.log('✅ Connection string found, creating table clients...');
       
       // Initialize table clients
       this.usersTableClient = new TableClient(this.connectionString, 'users');
       this.patientsTableClient = new TableClient(this.connectionString, 'patients');
       this.visitsTableClient = new TableClient(this.connectionString, 'visits');
 
-      console.log('Creating tables if they don\'t exist...');
+      console.log('✅ Table clients created, attempting to create tables...');
       
       // Create tables if they don't exist
       await this.usersTableClient.createTable();
+      console.log('✅ Users table ready');
+      
       await this.patientsTableClient.createTable();
+      console.log('✅ Patients table ready');
+      
       await this.visitsTableClient.createTable();
+      console.log('✅ Visits table ready');
 
-      console.log('Tables created, creating super admin if needed...');
+      console.log('✅ Tables created, creating super admin if needed...');
       
       // Create super admin if no users exist
       await this.createSuperAdminIfNeeded();
       
       this.isInitialized = true;
-      console.log('AuthService initialization complete');
+      console.log('✅ AuthService initialization complete!');
+      
+      // Return success (this resolves the this.ready Promise)
+      return true;
       
     } catch (error) {
-      console.error('Failed to initialize AuthService:', error);
+      console.error('❌ Failed to initialize AuthService:', error);
+      console.error('Error details:', error.message);
       this.isInitialized = false;
+      throw error; // This will reject the this.ready Promise
     }
   }
 
@@ -129,8 +140,11 @@ class AuthService {
   // Login user
   async login(username, password) {
     try {
+      // CRITICAL: Wait for initialization to complete before proceeding
+      await this.ready;
+      
       if (!this.isInitialized) {
-        throw new Error('Authentication service not initialized. Please check your Azure connection.');
+        throw new Error('Authentication service failed to initialize');
       }
 
       const userEntity = await this.usersTableClient.getEntity('user', username);
@@ -169,8 +183,11 @@ class AuthService {
   // Load current user from localStorage
   async loadCurrentUser() {
     try {
+      // CRITICAL: Wait for initialization to complete before proceeding
+      await this.ready;
+      
       if (!this.isInitialized) {
-        console.log('AuthService not initialized yet, cannot load user');
+        console.log('AuthService not initialized, cannot load user');
         return null;
       }
 
@@ -277,6 +294,8 @@ class AuthService {
   // Create new user (admin and super_admin only)
   async createUser(userData) {
     try {
+      await this.ready; // Wait for initialization
+      
       if (!this.hasPermission('add_users')) {
         throw new Error('Insufficient permissions');
       }
@@ -303,6 +322,8 @@ class AuthService {
   // Patient management methods
   async savePatient(patient) {
     try {
+      await this.ready; // Wait for initialization
+      
       if (!this.hasPermission('add_patients')) {
         throw new Error('Insufficient permissions');
       }
@@ -326,6 +347,8 @@ class AuthService {
 
   async getPatients() {
     try {
+      await this.ready; // Wait for initialization
+      
       const patients = [];
       const entities = this.patientsTableClient.listEntities();
       
@@ -344,6 +367,8 @@ class AuthService {
   // Visit management methods
   async saveVisit(patientId, visit) {
     try {
+      await this.ready; // Wait for initialization
+      
       if (!this.hasPermission('scribe')) {
         throw new Error('Insufficient permissions');
       }
@@ -366,6 +391,8 @@ class AuthService {
 
   async getVisits(patientId) {
     try {
+      await this.ready; // Wait for initialization
+      
       const visits = [];
       const entities = this.visitsTableClient.listEntities({
         queryOptions: { filter: `PartitionKey eq '${patientId}'` }
@@ -386,9 +413,9 @@ class AuthService {
     }
   }
 
-  // Check if service is ready
+  // Check if service is ready (deprecated - use await authService.ready instead)
   isReady() {
-    return this.isInitialized && this.usersTableClient !== null;
+    return this.isInitialized;
   }
 }
 
