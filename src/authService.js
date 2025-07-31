@@ -64,7 +64,8 @@ class AuthService {
       } else {
         console.log('✅ Development mode - creating tables if needed...');
         
-        const tableChecks = await Promise.allSettled([
+        // Create tables in parallel without storing results
+        await Promise.allSettled([
           this.usersTableClient.createTable(),
           this.patientsTableClient.createTable(),
           this.visitsTableClient.createTable()
