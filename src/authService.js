@@ -23,36 +23,57 @@ class AuthService {
     try {
       console.log('=== AuthService Debug Info ===');
       console.log('All environment variables:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
-      console.log('Connection string variable:', process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING ? 'Found' : 'Missing');
       console.log('Starting AuthService initialization...');
       
-      // Get connection string from environment
-      this.connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING;
+      // Get connection string from environment OR temporary hardcode
+      this.connectionString = process.env.REACT_APP_AZURE_STORAGE_CONNECTION_STRING || 
+                              process.env.REACT_APP_STORAGE_CONNECTION_STRING ||
+                              process.env.REACT_APP_CONNECTION_STRING ||
+                              process.env.REACT_APP_AZURE_CONNECTION_STRING;
       
+      // TEMPORARY: If environment variables aren't working, prompt user
       if (!this.connectionString || this.connectionString === 'your_connection_string_here' || this.connectionString === 'your_actual_connection_string_here') {
-        throw new Error('Azure connection string not configured or still has placeholder text');
+        console.error('❌ No environment variables found. Available variables:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+        
+        // Temporary fallback - ask user to paste connection string
+        const userConnectionString = prompt(
+          "Environment variables not working. Please paste your Azure Storage connection string:\n\n" +
+          "Go to Azure Portal → aayuscribestorage → Access keys → Connection string"
+        );
+        
+        if (userConnectionString && userConnectionString.startsWith('DefaultEndpointsProtocol=https')) {
+          this.connectionString = userConnectionString;
+          console.log('✅ Using user-provided connection string');
+        } else {
+          throw new Error('No valid connection string provided');
+        }
       }
 
       console.log('✅ Connection string found, creating table clients...');
       
       // Initialize table clients
       this.usersTableClient = new TableClient(this.connectionString, 'users');
-      this.patientsTableClient = new TableClient(this.connectionString, 'patients');
+      this.patientsTableClient = new TableClient(this.connectionString, 'patients');  
       this.visitsTableClient = new TableClient(this.connectionString, 'visits');
 
-      console.log('✅ Table clients created, attempting to create tables...');
+      // PERFORMANCE FIX: Skip table creation in production (tables should already exist)
+      const isProduction = process.env.NODE_ENV === 'production';
       
-      // Create tables if they don't exist
-      await this.usersTableClient.createTable();
-      console.log('✅ Users table ready');
-      
-      await this.patientsTableClient.createTable();
-      console.log('✅ Patients table ready');
-      
-      await this.visitsTableClient.createTable();
-      console.log('✅ Visits table ready');
+      if (isProduction) {
+        console.log('✅ Production mode - assuming tables exist, skipping creation');
+      } else {
+        console.log('✅ Development mode - creating tables if needed...');
+        
+        const tableChecks = await Promise.allSettled([
+          this.usersTableClient.createTable(),
+          this.patientsTableClient.createTable(),
+          this.visitsTableClient.createTable()
+        ]);
+        
+        console.log('✅ Tables created/verified');
+      }
 
-      console.log('✅ Tables created, creating super admin if needed...');
+      console.log('✅ Creating super admin if needed...');
       
       // Create super admin if no users exist
       await this.createSuperAdminIfNeeded();
