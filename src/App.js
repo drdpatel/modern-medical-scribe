@@ -50,22 +50,191 @@ function App() {
   });
   const [showApiKeys, setShowApiKeys] = useState(false);
 
+  // Training states
+  const [trainingData, setTrainingData] = useState({
+    specialty: 'internal_medicine',
+    noteType: 'progress_note',
+    baselineNotes: [],
+    customTemplates: {}
+  });
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [uploadedNoteText, setUploadedNoteText] = useState('');
+
   // Speech recognition refs
   const recognizerRef = useRef(null);
   const audioConfigRef = useRef(null);
 
-  // Load patients from localStorage
+  // Medical specialties and their common note types
+  const medicalSpecialties = {
+    internal_medicine: {
+      name: 'Internal Medicine',
+      noteTypes: {
+        progress_note: 'Progress Note',
+        history_physical: 'History & Physical',
+        consultation: 'Consultation',
+        discharge_summary: 'Discharge Summary',
+        procedure_note: 'Procedure Note'
+      }
+    },
+    cardiology: {
+      name: 'Cardiology',
+      noteTypes: {
+        echo_interpretation: 'Echo Interpretation',
+        cardiac_cath: 'Cardiac Catheterization',
+        stress_test: 'Stress Test',
+        ep_study: 'EP Study',
+        consultation: 'Cardiology Consultation'
+      }
+    },
+    emergency_medicine: {
+      name: 'Emergency Medicine',
+      noteTypes: {
+        ed_note: 'Emergency Department Note',
+        trauma_note: 'Trauma Note',
+        procedure_note: 'Procedure Note',
+        discharge_note: 'ED Discharge Note'
+      }
+    },
+    surgery: {
+      name: 'Surgery',
+      noteTypes: {
+        operative_note: 'Operative Note',
+        preop_note: 'Pre-operative Note',
+        postop_note: 'Post-operative Note',
+        consultation: 'Surgical Consultation'
+      }
+    },
+    psychiatry: {
+      name: 'Psychiatry',
+      noteTypes: {
+        psych_eval: 'Psychiatric Evaluation',
+        therapy_note: 'Therapy Note',
+        medication_management: 'Medication Management',
+        crisis_intervention: 'Crisis Intervention'
+      }
+    },
+    pediatrics: {
+      name: 'Pediatrics',
+      noteTypes: {
+        well_child: 'Well Child Visit',
+        sick_visit: 'Sick Visit',
+        developmental: 'Developmental Assessment',
+        vaccination: 'Vaccination Visit'
+      }
+    }
+  };
+
+  // Text cleaning function to remove markdown formatting
+  const cleanMarkdownFormatting = useCallback((text) => {
+    if (!text) return text;
+    
+    return text
+      // Remove bold **text** and __text__
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      // Remove italic *text* and _text_
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      // Remove strikethrough ~~text~~
+      .replace(/~~(.*?)~~/g, '$1')
+      // Remove code blocks ```text```
+      .replace(/```[\s\S]*?```/g, '')
+      // Remove inline code `text`
+      .replace(/`(.*?)`/g, '$1')
+      // Remove headers #, ##, ###, etc.
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remove bullet points - and *
+      .replace(/^[\s]*[-*+]\s+/gm, '• ')
+      // Remove numbered lists
+      .replace(/^\d+\.\s+/gm, '')
+      // Clean up extra whitespace
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .trim();
+  }, []);
+
+  // Load training data from localStorage
+  const loadTrainingData = useCallback(() => {
+    try {
+      const saved = localStorage.getItem('medicalScribeTraining');
+      if (saved) {
+        setTrainingData(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('Failed to load training data:', error);
+    }
+  }, []);
+
+  // Save training data to localStorage
+  const saveTrainingData = useCallback((data) => {
+    try {
+      localStorage.setItem('medicalScribeTraining', JSON.stringify(data));
+      setTrainingData(data);
+    } catch (error) {
+      console.error('Failed to save training data:', error);
+    }
+  }, []);
+
+  // Add baseline note
+  const addBaselineNote = useCallback(() => {
+    if (!uploadedNoteText.trim()) {
+      alert('Please enter a note before adding it to baseline');
+      return;
+    }
+
+    const newNote = {
+      id: Date.now(),
+      content: cleanMarkdownFormatting(uploadedNoteText.trim()),
+      specialty: trainingData.specialty,
+      noteType: trainingData.noteType,
+      dateAdded: new Date().toISOString(),
+      addedBy: currentUser?.name || 'Unknown'
+    };
+
+    const updatedData = {
+      ...trainingData,
+      baselineNotes: [...trainingData.baselineNotes, newNote].slice(-5) // Keep only last 5 notes
+    };
+
+    saveTrainingData(updatedData);
+    setUploadedNoteText('');
+    alert('Baseline note added successfully!');
+  }, [uploadedNoteText, trainingData, currentUser, saveTrainingData, cleanMarkdownFormatting]);
+
+  // Remove baseline note
+  const removeBaselineNote = useCallback((noteId) => {
+    const updatedData = {
+      ...trainingData,
+      baselineNotes: trainingData.baselineNotes.filter(note => note.id !== noteId)
+    };
+    saveTrainingData(updatedData);
+  }, [trainingData, saveTrainingData]);
+
+ Use the baseline examples as style guides for this provider's preferences.`;
+  }, [trainingData]);
+
+  // Load patients from localStorage with better error handling
   const loadPatientsFromLocalStorage = useCallback(() => {
     try {
+      console.log('Loading patients from localStorage...');
       const patientsData = authService.getPatients();
+      console.log('Raw patients data:', patientsData);
+      
       const patientsWithVisits = patientsData.map(patient => {
-        const visits = authService.getVisits(patient.id);
-        return { ...patient, visits: visits || [] };
+        try {
+          const visits = authService.getVisits(patient.id);
+          return { ...patient, visits: visits || [] };
+        } catch (visitError) {
+          console.error(`Error loading visits for patient ${patient.id}:`, visitError);
+          return { ...patient, visits: [] };
+        }
       });
+      
+      console.log('Processed patients with visits:', patientsWithVisits);
       setPatients(patientsWithVisits);
     } catch (error) {
       console.error('Failed to load patients:', error);
       setPatients([]);
+      setStatus('Warning: Could not load patient data');
     }
   }, []);
 
@@ -84,6 +253,7 @@ function App() {
           setCurrentUser(user);
           setStatus('Ready to begin');
           loadPatientsFromLocalStorage();
+          loadTrainingData();
         } else {
           setShowLoginModal(true);
         }
@@ -101,7 +271,7 @@ function App() {
     };
 
     initializeApp();
-  }, [loadPatientsFromLocalStorage]);
+  }, [loadPatientsFromLocalStorage, loadTrainingData]);
 
   // Authentication handlers
   const handleLogin = useCallback((e) => {
@@ -115,10 +285,11 @@ function App() {
       setLoginForm({ username: '', password: '' });
       setStatus('Login successful - Ready to begin');
       loadPatientsFromLocalStorage();
+      loadTrainingData();
     } catch (error) {
       setLoginError(error.message);
     }
-  }, [loginForm, loadPatientsFromLocalStorage]);
+  }, [loginForm, loadPatientsFromLocalStorage, loadTrainingData]);
 
   const handleLogout = useCallback(() => {
     authService.logout();
@@ -345,7 +516,7 @@ function App() {
     }
   }, []);
 
-  // AI note generation
+  // AI note generation with training data
   const generateNotes = useCallback(async () => {
     if (!authService.hasPermission('scribe')) {
       setStatus('You do not have permission to generate notes');
@@ -387,44 +558,71 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
       }
 
-      const systemPrompt = `You are a medical scribe assistant. Create professional medical notes including Chief Complaint, History of Present Illness, Assessment, and Plan sections. Use appropriate medical terminology and maintain professional format.`;
+      const systemPrompt = generateSpecialtyPrompt();
+
+      // Fix API endpoint concatenation
+      const endpoint = openaiEndpoint.endsWith('/') ? openaiEndpoint : openaiEndpoint + '/';
+      const apiUrl = `${endpoint}openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`;
+      
+      console.log('Making OpenAI request to:', apiUrl);
+      console.log('Using deployment:', openaiDeployment);
+      console.log('Specialty config:', medicalSpecialties[trainingData.specialty].name, '-', medicalSpecialties[trainingData.specialty].noteTypes[trainingData.noteType]);
 
       const response = await axios.post(
-        `${openaiEndpoint}openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`,
+        apiUrl,
         {
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `${patientContext}\n\nCURRENT VISIT TRANSCRIPT:\n${transcript}\n\nPlease convert this into structured medical notes.` }
+            { role: 'user', content: `${patientContext}\n\nCURRENT VISIT TRANSCRIPT:\n${transcript}\n\nPlease convert this into a structured ${medicalSpecialties[trainingData.specialty].noteTypes[trainingData.noteType]} following the provider's style from the baseline examples.` }
           ],
-          max_tokens: 1500,
-          temperature: 0.3
+          max_tokens: 2000,
+          temperature: 0.1,  // Lower temperature for more consistent medical documentation
+          top_p: 0.9,
+          frequency_penalty: 0.1
         },
         {
           headers: {
             'Content-Type': 'application/json',
             'api-key': openaiKey
-          }
+          },
+          timeout: 30000  // 30 second timeout
         }
       );
 
-      setMedicalNotes(response.data.choices[0].message.content);
+      console.log('OpenAI response received:', response.status);
+
+      // Clean the generated notes more thoroughly
+      const rawNotes = response.data.choices[0].message.content;
+      console.log('Raw notes before cleaning:', rawNotes.substring(0, 200) + '...');
+      
+      const cleanedNotes = cleanMarkdownFormatting(rawNotes);
+      console.log('Notes after cleaning:', cleanedNotes.substring(0, 200) + '...');
+      
+      setMedicalNotes(cleanedNotes);
       setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
       
     } catch (error) {
       console.error('AI generation error:', error);
-      if (error.response?.status === 401) {
+      
+      if (error.code === 'ECONNABORTED') {
+        setStatus('Request timed out. Please try again.');
+      } else if (error.response?.status === 401) {
         setStatus('OpenAI authentication failed. Check your API key.');
       } else if (error.response?.status === 404) {
-        setStatus('OpenAI deployment not found. Check your deployment name.');
+        setStatus('OpenAI deployment not found. Check your deployment name and endpoint.');
       } else if (error.response?.status === 429) {
         setStatus('OpenAI rate limit exceeded. Wait a moment and try again.');
+      } else if (error.response?.status === 400) {
+        setStatus('Invalid request. Check your OpenAI settings and try again.');
+      } else if (error.response?.data?.error?.message) {
+        setStatus('Failed to generate notes: ' + error.response.data.error.message);
       } else {
-        setStatus('Failed to generate notes: ' + (error.response?.data?.error?.message || error.message));
+        setStatus('Failed to generate notes: ' + error.message);
       }
     } finally {
       setIsProcessing(false);
     }
-  }, [transcript, selectedPatient, apiSettings]);
+  }, [transcript, selectedPatient, apiSettings, trainingData, generateSpecialtyPrompt, cleanMarkdownFormatting]);
 
   // Save visit
   const saveVisit = useCallback(() => {
@@ -449,6 +647,8 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       time: new Date().toLocaleTimeString(),
       transcript: transcript,
       notes: medicalNotes,
+      specialty: trainingData.specialty,
+      noteType: trainingData.noteType,
       timestamp: new Date().toISOString()
     };
 
@@ -475,7 +675,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + error.message);
     }
-  }, [medicalNotes, selectedPatient, transcript, currentUser, patients, reloadPatients]);
+  }, [medicalNotes, selectedPatient, transcript, currentUser, patients, reloadPatients, trainingData]);
 
   // Utility functions
   const filteredPatients = patients.filter(patient =>
@@ -493,9 +693,24 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     return colors[index];
   }, []);
 
-  // Handle patient selection
+  // Handle patient selection with proper guards
   const handlePatientSelect = useCallback((patientId) => {
-    const patient = patients.find(p => p.id === parseInt(patientId));
+    console.log('Selecting patient:', patientId);
+    
+    if (!patientId || patientId === '') { 
+      setSelectedPatient(null); 
+      return; 
+    }
+    
+    const parsedId = parseInt(patientId);
+    if (isNaN(parsedId)) {
+      console.error('Invalid patient ID:', patientId);
+      setSelectedPatient(null);
+      return;
+    }
+    
+    const patient = patients.find(p => p.id === parsedId);
+    console.log('Found patient:', patient);
     setSelectedPatient(patient || null);
   }, [patients]);
 
@@ -555,6 +770,18 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         </button>
 
         <button 
+          className={`nav-button ${activeTab === 'training' ? 'active' : ''}`}
+          onClick={() => setActiveTab('training')}
+          disabled={!authService.hasPermission('scribe')}
+          style={{
+            opacity: !authService.hasPermission('scribe') ? 0.5 : 1,
+            cursor: !authService.hasPermission('scribe') ? 'not-allowed' : 'pointer'
+          }}
+        >
+          Training
+        </button>
+
+        <button 
           className={`nav-button ${activeTab === 'patients' ? 'active' : ''}`}
           onClick={() => setActiveTab('patients')}
         >
@@ -594,7 +821,199 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     </div>
   );
 
-  // Scribe page component
+  // Training page component
+  const renderTrainingPage = () => {
+    if (!authService.hasPermission('scribe')) {
+      return (
+        <div className="content-container">
+          <div className="page-header">
+            <h2 className="page-title">AI Training</h2>
+          </div>
+          <div className="card">
+            <h3 className="card-title">Access Denied</h3>
+            <p>You do not have permission to access the training functionality. Contact your administrator if you need access.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="content-container">
+        <div className="page-header">
+          <h2 className="page-title">AI Training Center</h2>
+        </div>
+
+        {/* Current Configuration */}
+        <div className="card">
+          <h3 className="card-title">Current Training Configuration</h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+            <div>
+              <label className="form-label">Medical Specialty</label>
+              <select 
+                className="form-input"
+                value={trainingData.specialty}
+                onChange={(e) => {
+                  const newData = { ...trainingData, specialty: e.target.value, noteType: Object.keys(medicalSpecialties[e.target.value].noteTypes)[0] };
+                  saveTrainingData(newData);
+                }}
+              >
+                {Object.entries(medicalSpecialties).map(([key, specialty]) => (
+                  <option key={key} value={key}>{specialty.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label">Note Type</label>
+              <select 
+                className="form-input"
+                value={trainingData.noteType}
+                onChange={(e) => {
+                  const newData = { ...trainingData, noteType: e.target.value };
+                  saveTrainingData(newData);
+                }}
+              >
+                {Object.entries(medicalSpecialties[trainingData.specialty].noteTypes).map(([key, name]) => (
+                  <option key={key} value={key}>{name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: 'var(--aayu-pale-lime)', 
+            borderRadius: '8px',
+            border: '2px solid var(--aayu-lime)',
+            fontSize: '14px'
+          }}>
+            <strong>Current Settings:</strong> {medicalSpecialties[trainingData.specialty].name} - {medicalSpecialties[trainingData.specialty].noteTypes[trainingData.noteType]}
+            <br />
+            <strong>Baseline Notes:</strong> {trainingData.baselineNotes.length} uploaded
+          </div>
+        </div>
+
+        {/* Add Baseline Note */}
+        <div className="card">
+          <h3 className="card-title">Add Baseline Note</h3>
+          <p style={{ color: 'var(--aayu-gray)', marginBottom: '16px' }}>
+            Upload examples of your preferred note style. The AI will learn from these to match your documentation preferences.
+          </p>
+
+          <div className="form-group">
+            <label className="form-label">Paste Previous Note (up to 5 notes stored)</label>
+            <textarea
+              className="form-textarea"
+              style={{ minHeight: '200px' }}
+              value={uploadedNoteText}
+              onChange={(e) => setUploadedNoteText(e.target.value)}
+              placeholder={`Paste a ${medicalSpecialties[trainingData.specialty].noteTypes[trainingData.noteType]} here...
+
+Example:
+CHIEF COMPLAINT: Follow-up visit for hypertension
+
+HISTORY OF PRESENT ILLNESS:
+Mr. Smith is a 55-year-old male with a history of hypertension...
+
+etc.`}
+            />
+          </div>
+
+          <button 
+            className="btn btn-success"
+            onClick={addBaselineNote}
+            disabled={!uploadedNoteText.trim()}
+          >
+            Add to Baseline
+          </button>
+        </div>
+
+        {/* Current Baseline Notes */}
+        <div className="card">
+          <h3 className="card-title">Current Baseline Notes ({trainingData.baselineNotes.length}/5)</h3>
+          
+          {trainingData.baselineNotes.length === 0 ? (
+            <div className="empty-state">
+              No baseline notes uploaded yet. Add your first example note above.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {trainingData.baselineNotes.map((note, index) => (
+                <div key={note.id} style={{ 
+                  border: '2px solid var(--aayu-navy)', 
+                  borderRadius: '8px', 
+                  padding: '16px'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '12px'
+                  }}>
+                    <div>
+                      <strong>Note #{index + 1}</strong>
+                      <div style={{ fontSize: '12px', color: 'var(--aayu-gray)' }}>
+                        {medicalSpecialties[note.specialty]?.name} - {medicalSpecialties[note.specialty]?.noteTypes[note.noteType]}
+                        <br />
+                        Added: {new Date(note.dateAdded).toLocaleDateString()} by {note.addedBy}
+                      </div>
+                    </div>
+                    <button 
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 16px', fontSize: '12px' }}
+                      onClick={() => removeBaselineNote(note.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  
+                  <div style={{ 
+                    backgroundColor: 'var(--aayu-light-gray)', 
+                    padding: '12px', 
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    maxHeight: '150px',
+                    overflow: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace'
+                  }}>
+                    {note.content.substring(0, 500)}
+                    {note.content.length > 500 && '...'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Training Tips */}
+        <div className="card">
+          <h3 className="card-title">Training Tips</h3>
+          <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+            <p><strong>Best Practices:</strong></p>
+            <div style={{ marginLeft: '20px' }}>
+              - Upload 3-5 example notes that represent your ideal documentation style<br />
+              - Use notes from the same specialty and note type you'll be dictating<br />
+              - Include complete notes with all sections you typically use<br />
+              - Remove any patient-specific information before uploading<br />
+              - Update baseline notes periodically as your preferences evolve
+            </div>
+            
+            <p style={{ marginTop: '16px' }}><strong>Note Processing:</strong></p>
+            <div style={{ marginLeft: '20px' }}>
+              - The AI automatically removes markdown formatting (**, *, _, etc.)<br />
+              - Only plain text formatting is preserved in generated notes<br />
+              - Specialty-specific sections and terminology are emphasized<br />
+              - Your writing style and structure preferences are learned from examples
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Scribe page component (updated with training info)
   const renderScribePage = () => {
     if (!authService.hasPermission('scribe')) {
       return (
@@ -614,6 +1033,53 @@ ${selectedPatient.visits.slice(-3).map(visit =>
       <div className="content-container">
         <div className="page-header">
           <h2 className="page-title">Medical Scribe</h2>
+        </div>
+
+        {/* Training Status */}
+        <div className="card">
+          <h3 className="card-title">AI Configuration</h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '16px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'var(--aayu-pale-purple)', 
+              borderRadius: '8px',
+              border: '2px solid var(--aayu-purple)'
+            }}>
+              <strong>Specialty:</strong><br />
+              {medicalSpecialties[trainingData.specialty].name}
+            </div>
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'var(--aayu-pale-lime)', 
+              borderRadius: '8px',
+              border: '2px solid var(--aayu-lime)'
+            }}>
+              <strong>Note Type:</strong><br />
+              {medicalSpecialties[trainingData.specialty].noteTypes[trainingData.noteType]}
+            </div>
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: 'rgba(63, 81, 181, 0.1)', 
+              borderRadius: '8px',
+              border: '2px solid var(--aayu-navy)'
+            }}>
+              <strong>Training Notes:</strong><br />
+              {trainingData.baselineNotes.length} examples
+            </div>
+          </div>
+          
+          <button 
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('training')}
+            style={{ fontSize: '14px', padding: '12px 20px' }}
+          >
+            Configure Training
+          </button>
         </div>
 
         {/* Patient Selection Section */}
@@ -893,6 +1359,9 @@ ${selectedPatient.visits.slice(-3).map(visit =>
                     <div className="visit-meta">
                       Time: {visit.time}
                       {visit.createdByName && <span> • By: {visit.createdByName}</span>}
+                      {visit.specialty && visit.noteType && (
+                        <span> • {medicalSpecialties[visit.specialty]?.name} - {medicalSpecialties[visit.specialty]?.noteTypes[visit.noteType]}</span>
+                      )}
                     </div>
                   </div>
                   <div className="visit-arrow">→</div>
@@ -1029,6 +1498,14 @@ ${selectedPatient.visits.slice(-3).map(visit =>
           <button className="btn btn-success" onClick={() => saveApiSettings(apiSettings)}>
             Save Settings
           </button>
+          
+          <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--aayu-gray)' }}>
+            <strong>Current Status:</strong> 
+            {apiSettings.speechKey && apiSettings.openaiKey ? 
+              <span style={{ color: 'green' }}> ✓ Configured</span> : 
+              <span style={{ color: 'red' }}> ✗ Missing required keys</span>
+            }
+          </div>
         </div>
       </div>
     </div>
@@ -1043,6 +1520,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
         {currentUser && (
           <>
             {activeTab === 'scribe' && renderScribePage()}
+            {activeTab === 'training' && renderTrainingPage()}
             {activeTab === 'patients' && renderPatientsPage()}
             {activeTab === 'settings' && renderSettingsPage()}
             {activeTab === 'users' && authService.hasPermission('add_users') && renderUsersPage()}
@@ -1286,6 +1764,9 @@ ${selectedPatient.visits.slice(-3).map(visit =>
                 <p className="modal-subtitle">
                   {selectedVisit.date} at {selectedVisit.time}
                   {selectedVisit.createdByName && ` • Created by: ${selectedVisit.createdByName}`}
+                  {selectedVisit.specialty && selectedVisit.noteType && (
+                    <span> • {medicalSpecialties[selectedVisit.specialty]?.name} - {medicalSpecialties[selectedVisit.specialty]?.noteTypes[selectedVisit.noteType]}</span>
+                  )}
                 </p>
               </div>
               <button className="modal-close" onClick={() => setShowVisitModal(false)}>Close</button>
