@@ -209,8 +209,57 @@ function App() {
     saveTrainingData(updatedData);
   }, [trainingData, saveTrainingData]);
 
- Use the baseline examples as style guides for this provider's preferences.`;
-  }, [trainingData]);;
+  // Generate specialty-specific prompt
+  const generateSpecialtyPrompt = useCallback(() => {
+    const specialty = medicalSpecialties[trainingData.specialty];
+    const noteTypeName = specialty.noteTypes[trainingData.noteType];
+    
+    let baselineContext = '';
+    if (trainingData.baselineNotes.length > 0) {
+      const relevantNotes = trainingData.baselineNotes
+        .filter(note => note.specialty === trainingData.specialty && note.noteType === trainingData.noteType)
+        .slice(-3); // Use last 3 relevant notes
+      
+      if (relevantNotes.length > 0) {
+        baselineContext = `\n\nPROVIDER STYLE EXAMPLES (match this exact style and format):\n${
+          relevantNotes.map((note, idx) => `Example ${idx + 1}:\n${note.content}`).join('\n\n---\n\n')
+        }`;
+      }
+    }
+
+    const specialtyInstructions = {
+      internal_medicine: 'Focus on comprehensive assessment, chronic disease management, and preventive care. Include vital signs, medication reconciliation, and follow-up planning.',
+      cardiology: 'Emphasize cardiovascular examination, risk stratification, cardiac-specific assessments, and diagnostic test interpretation.',
+      emergency_medicine: 'Prioritize acute presentation, triage assessment, disposition planning, and time-sensitive clinical decisions.',
+      surgery: 'Detail procedural findings, surgical technique, complications, post-operative orders, and discharge planning.',
+      psychiatry: 'Include mental status examination, suicide/violence risk assessment, medication management, and therapeutic planning.',
+      pediatrics: 'Consider age-appropriate development, growth parameters, immunization status, family dynamics, and pediatric-specific concerns.'
+    };
+
+    return `You are an expert medical scribe for ${specialty.name}. Generate a ${noteTypeName} that follows these strict requirements:
+
+CRITICAL FORMATTING RULES:
+- ABSOLUTELY NO markdown formatting: no *, **, _, __, #, ##, [], (), or any special characters for formatting
+- Use ONLY plain text with standard punctuation
+- Headers should be in ALL CAPS followed by a colon
+- Use simple bullet points with hyphens (-) when listing items
+- No numbered lists unless clinically appropriate
+- Keep sentences concise and medically accurate
+
+SPECIALTY REQUIREMENTS:
+${specialtyInstructions[trainingData.specialty]}
+
+REQUIRED DOCUMENTATION STRUCTURE:
+CHIEF COMPLAINT: [Brief statement in patient's words]
+HISTORY OF PRESENT ILLNESS: [Chronological narrative with timing, quality, severity, associated symptoms]
+REVIEW OF SYSTEMS: [Pertinent positives and negatives by system]
+PHYSICAL EXAMINATION: [Organized by body systems with specific findings]
+ASSESSMENT AND PLAN: [List each problem with specific management plan]
+
+${baselineContext}
+
+INSTRUCTIONS: Convert the transcript into professional medical documentation matching the provider's style from the examples. Focus on clinical accuracy, appropriate medical terminology, and completely clean plain text formatting.`;
+  }, [trainingData, medicalSpecialties]);
 
   // Load patients from localStorage with better error handling
   const loadPatientsFromLocalStorage = useCallback(() => {
@@ -622,7 +671,7 @@ ${selectedPatient.visits.slice(-3).map(visit =>
     } finally {
       setIsProcessing(false);
     }
-  }, [transcript, selectedPatient, apiSettings, trainingData, generateSpecialtyPrompt, cleanMarkdownFormatting]);
+  }, [transcript, selectedPatient, apiSettings, trainingData, generateSpecialtyPrompt, cleanMarkdownFormatting, medicalSpecialties]);
 
   // Save visit
   const saveVisit = useCallback(() => {
