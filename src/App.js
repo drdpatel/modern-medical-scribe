@@ -210,7 +210,7 @@ function App() {
   }, [trainingData, saveTrainingData]);
 
  Use the baseline examples as style guides for this provider's preferences.`;
-  }, [trainingData]);
+  }, [trainingData]);;
 
   // Load patients from localStorage with better error handling
   const loadPatientsFromLocalStorage = useCallback(() => {
