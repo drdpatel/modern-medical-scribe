@@ -1,0 +1,46 @@
+name: Deploy Azure Functions
+
+# Only trigger on changes to functions/ folder or this workflow file
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - '.github/workflows/azure-functions-deploy.yml'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@v4
+
+    - name: 'Setup Node.js'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'functions/package-lock.json'
+
+    - name: 'Install dependencies'
+      run: |
+        cd functions
+        npm ci
+
+    - name: 'Deploy to Azure Functions'
+      uses: Azure/functions-action@v1
+      with:
+        app-name: 'aayuscribe-api'
+        slot-name: 'production'
+        package: './functions'
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        
+    - name: 'Test deployment'
+      run: |
+        echo "Waiting 30 seconds for deployment to complete..."
+        sleep 30
+        echo "Testing health endpoint..."
+        curl -f https://aayuscribe-api.azurewebsites.net/api/health || echo "Health check failed"
