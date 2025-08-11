@@ -1127,8 +1127,8 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     );
   }
 
-  // Memoized render functions for performance
-  const renderSidebar = useMemo(() => (
+  // Sidebar render function
+  const renderSidebar = () => (
     <div className="sidebar">
       <div className="sidebar-header">
         <h1 className="sidebar-title">
@@ -1213,7 +1213,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         Secure • Simplified
       </div>
     </div>
-  ), [currentUser, activeTab, handleLogout]);
+  );
 
   // Simplified render based on active tab
   const renderActivePage = () => {
@@ -1808,7 +1808,7 @@ etc.`}
   return (
     <ErrorBoundary>
       <div className="app-container">
-        {currentUser && renderSidebar}
+        {currentUser && renderSidebar()}
         
         <main className="main-content">
           {currentUser ? renderActivePage() : (
