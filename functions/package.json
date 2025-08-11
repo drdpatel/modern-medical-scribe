@@ -12,9 +12,7 @@
     "@azure/data-tables": "^13.2.2",
     "bcryptjs": "^2.4.3"
   },
-  "devDependencies": {
-    "@azure/functions-core-tools": "^4.0.5633"
-  },
+
   "engines": {
     "node": ">=18.0.0"
   }
