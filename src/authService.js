@@ -14,7 +14,7 @@ class AuthService {
     
     this.currentUser = this.loadCurrentUser();
     this.sessionTimeout = 3600000; // 1 hour
-    this.apiBaseUrl = '/api'; // This will be your Azure Functions endpoint
+    this.apiBaseUrl = 'https://aayuscribe-api.azurewebsites.net/api';
     
     if (this.currentUser) {
       this.startInactivityTimer();
