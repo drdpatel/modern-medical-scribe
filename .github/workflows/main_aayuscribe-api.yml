@@ -34,7 +34,6 @@ jobs:
           pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
           npm install
           npm run build --if-present
-          
           popd
 
       - name: Upload artifact for deployment job
@@ -59,6 +58,5 @@ jobs:
         with:
           app-name: 'aayuscribe-api'
           slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-
+          package: '.'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_ACB9E6BBD09F450BAC8A1885C019C682 }}
