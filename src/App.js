@@ -1679,112 +1679,35 @@ etc.`}
           </div>
         );
 
-      case 'settings':
+      case 'users':
         return (
           <div className="content-container">
             <div className="page-header">
-              <h2 className="page-title">API Settings</h2>
+              <h2 className="page-title">User Management</h2>
             </div>
 
             <div className="card">
-              <h3 className="card-title">Azure Configuration</h3>
-              <p className="settings-description">
-                Configure your Azure Speech and OpenAI services. Keys are stored locally and never transmitted.
-              </p>
-
-              <div className="settings-form">
-                <div className="form-group">
-                  <label className="form-label">Azure Speech Service Key</label>
-                  <input 
-                    type={showApiKeys ? "text" : "password"} 
-                    className="form-input" 
-                    placeholder="Enter your Azure Speech key"
-                    value={apiSettings.speechKey}
-                    onChange={(e) => setApiSettings({...apiSettings, speechKey: e.target.value})}
-                  />
+              <h3 className="card-title">System Users</h3>
+              
+              <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--aayu-pale-lime)', borderRadius: '8px', border: '2px solid var(--aayu-lime)' }}>
+                <strong>Current Users:</strong>
+                <div style={{ marginTop: '8px' }}>
+                  • darshan@aayuwell.com - Dr. Darshan Patel (Super Admin)<br />
+                  • admin - Admin User (Admin)<br />
+                  • doctor - Dr. Provider (Medical Provider)<br />
+                  • staff - Support Staff (Support Staff)
                 </div>
+              </div>
 
-                <div className="form-group">
-                  <label className="form-label">Azure Speech Region</label>
-                  <select 
-                    className="form-input"
-                    value={apiSettings.speechRegion}
-                    onChange={(e) => setApiSettings({...apiSettings, speechRegion: e.target.value})}
-                  >
-                    <option value="eastus">East US</option>
-                    <option value="westus2">West US 2</option>
-                    <option value="centralus">Central US</option>
-                    <option value="westeurope">West Europe</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Azure OpenAI Endpoint</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="https://your-resource.openai.azure.com/"
-                    value={apiSettings.openaiEndpoint}
-                    onChange={(e) => setApiSettings({...apiSettings, openaiEndpoint: e.target.value})}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Azure OpenAI API Key</label>
-                  <input 
-                    type={showApiKeys ? "text" : "password"} 
-                    className="form-input" 
-                    placeholder="Enter your OpenAI key"
-                    value={apiSettings.openaiKey}
-                    onChange={(e) => setApiSettings({...apiSettings, openaiKey: e.target.value})}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">OpenAI Deployment Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="gpt-4"
-                    value={apiSettings.openaiDeployment}
-                    onChange={(e) => setApiSettings({...apiSettings, openaiDeployment: e.target.value})}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">API Version</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="2024-08-01-preview"
-                    value={apiSettings.openaiApiVersion}
-                    onChange={(e) => setApiSettings({...apiSettings, openaiApiVersion: e.target.value})}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    <input 
-                      type="checkbox" 
-                      checked={showApiKeys}
-                      onChange={(e) => setShowApiKeys(e.target.checked)}
-                      style={{ marginRight: '8px' }}
-                    />
-                    Show API Keys
-                  </label>
-                </div>
-
-                <button className="btn btn-success" onClick={() => saveApiSettings(apiSettings)}>
-                  Save Settings
-                </button>
-                
-                <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--aayu-gray)' }}>
-                  <strong>Current Status:</strong> 
-                  {apiSettings.speechKey && apiSettings.openaiKey ? 
-                    <span style={{ color: 'green' }}> ✓ Configured</span> : 
-                    <span style={{ color: 'red' }}> ✗ Missing required keys</span>
-                  }
-                </div>
+              <button 
+                className="btn btn-success"
+                onClick={() => setShowCreateUserModal(true)}
+              >
+                Add New User
+              </button>
+              
+              <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'rgba(63, 81, 181, 0.05)', borderRadius: '8px', fontSize: '14px', color: 'var(--aayu-gray)' }}>
+                <strong>Note:</strong> User creation is currently in demo mode. Contact your IT administrator to permanently add users.
               </div>
             </div>
           </div>
