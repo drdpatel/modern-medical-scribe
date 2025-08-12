@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'functions/**'
+      - '.github/workflows/main_aayuscribe-api.yml'
   workflow_dispatch:
 
 env:
@@ -60,3 +63,4 @@ jobs:
           slot-name: 'Production'
           package: '.'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_ACB9E6BBD09F450BAC8A1885C019C682 }}
+
