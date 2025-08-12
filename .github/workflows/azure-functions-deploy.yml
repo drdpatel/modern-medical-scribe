@@ -6,38 +6,41 @@ on:
       - main
     paths:
       - 'functions/**'
-      - '.github/workflows/azure-functions-deploy.yml'
   workflow_dispatch:
 
 env:
   AZURE_FUNCTIONAPP_NAME: 'aayuscribe-api'
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'functions'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: './functions'
   NODE_VERSION: '18.x'
 
 jobs:
-  build-and-deploy:
+  deploy-functions:
     runs-on: ubuntu-latest
     
     steps:
-    - name: 'Checkout GitHub Action'
+    - name: 'Checkout GitHub repo'
       uses: actions/checkout@v3
 
-    - name: Setup Node ${{ env.NODE_VERSION }} Environment
+    - name: 'Setup Node.js environment'
       uses: actions/setup-node@v3
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    - name: 'Install dependencies'
+    - name: 'Resolve Project Dependencies'
       shell: bash
       run: |
-        pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
+        echo "Moving to functions directory..."
+        cd ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        echo "Current directory: $(pwd)"
+        echo "Files in directory:"
+        ls -la
+        echo "Installing production dependencies..."
         npm ci --only=production
-        popd
+        echo "Dependencies installed successfully"
 
-    - name: 'Deploy to Azure Functions'
+    - name: 'Run Azure Functions Action'
       uses: Azure/functions-action@v1
       with:
         app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
-        respect-funcignore: true
