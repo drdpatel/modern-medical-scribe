@@ -1130,10 +1130,16 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
   // Sidebar render function
   const renderSidebar = () => (
     <div className="sidebar">
-      <div className="sidebar-header">
-        <h1 className="sidebar-title">
-          <span>Aayu AI Scribe</span>
-        </h1>
+    <div className="sidebar-header">
+  <div className="logo-wrapper">
+    <img 
+      src={require('./assets/aayu-logo.png')} 
+      alt="Aayu Well" 
+      className="logo-image"
+    />
+  </div>
+  <div className="sidebar-title">Aayu Well</div>
+  <div className="sidebar-subtitle">AI SCRIBE</div>
         {currentUser && (
           <div style={{ 
             marginTop: '12px', 
