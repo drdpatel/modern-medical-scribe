@@ -16,6 +16,26 @@ const MEDICAL_SPECIALTIES = {
       procedure_note: 'Procedure Note'
     }
   },
+  obesity_medicine: {
+    name: 'Obesity Medicine',
+    noteTypes: {
+      initial_consultation: 'Initial Weight Management Consultation',
+      follow_up: 'Weight Management Follow-up',
+      medication_management: 'Obesity Medication Management',
+      bariatric_eval: 'Pre-Bariatric Surgery Evaluation',
+      lifestyle_counseling: 'Lifestyle Modification Counseling'
+    }
+  },
+  registered_dietitian: {
+    name: 'Registered Dietitian',
+    noteTypes: {
+      nutrition_assessment: 'Nutrition Assessment',
+      meal_planning: 'Meal Planning Session',
+      follow_up: 'Nutrition Follow-up',
+      diabetes_education: 'Diabetes Nutrition Education',
+      weight_management: 'Weight Management Counseling'
+    }
+  },
   cardiology: {
     name: 'Cardiology',
     noteTypes: {
@@ -66,6 +86,8 @@ const MEDICAL_SPECIALTIES = {
 
 const SPECIALTY_INSTRUCTIONS = {
   internal_medicine: 'Focus on comprehensive assessment, chronic disease management, and preventive care. Include vital signs, medication reconciliation, and follow-up planning.',
+  obesity_medicine: 'Document BMI, weight trends, comorbidities, current medications, dietary habits, physical activity levels, behavioral modifications, and treatment plan including pharmacotherapy if applicable.',
+  registered_dietitian: 'Include anthropometric measurements, dietary intake analysis, nutrient needs assessment, food preferences, barriers to change, education provided, and specific meal planning recommendations.',
   cardiology: 'Emphasize cardiovascular examination, risk stratification, cardiac-specific assessments, and diagnostic test interpretation.',
   emergency_medicine: 'Prioritize acute presentation, triage assessment, disposition planning, and time-sensitive clinical decisions.',
   surgery: 'Detail procedural findings, surgical technique, complications, post-operative orders, and discharge planning.',
@@ -132,12 +154,13 @@ function App() {
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [patientSearchTerm, setPatientSearchTerm] = useState(''); // New state for scribe patient search
   const [showPatientModal, setShowPatientModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   
-  // New patient form state
-  const [newPatient, setNewPatient] = useState({
+  // New patient form state - FIXED: renamed to newPatientData
+  const [newPatientData, setNewPatientData] = useState({
     firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: ''
   });
 
@@ -186,6 +209,18 @@ function App() {
       return fullName.includes(term) || dob.includes(term);
     });
   }, [patients, searchTerm]);
+
+  // Filtered patients for scribe dropdown search
+  const filteredPatientsForScribe = useMemo(() => {
+    if (!patientSearchTerm.trim()) return patients;
+    
+    const term = patientSearchTerm.toLowerCase();
+    return patients.filter(patient => {
+      const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
+      const dob = patient.dateOfBirth || '';
+      return fullName.includes(term) || dob.includes(term);
+    });
+  }, [patients, patientSearchTerm]);
 
   // Text cleaning function to remove markdown formatting
   const cleanMarkdownFormatting = useCallback((text) => {
@@ -370,45 +405,25 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, [trainingData]);
 
-  // Load patients from localStorage with better error handling
+  // FIXED: Load patients from localStorage with simplified logic
   const loadPatientsFromLocalStorage = useCallback(() => {
     try {
-      console.log('Loading patients from localStorage...');
-      
-      if (!authService || typeof authService.getPatients !== 'function') {
-        throw new Error('AuthService not available');
-      }
-      
-      const patientsData = authService.getPatients();
-      console.log('Raw patients data:', patientsData);
-      
-      if (!Array.isArray(patientsData)) {
-        console.warn('Invalid patients data format, using empty array');
-        setPatients([]);
-        return;
-      }
-      
-      const patientsWithVisits = patientsData.map(patient => {
-        try {
-          if (!patient || typeof patient !== 'object') {
-            console.warn('Invalid patient object:', patient);
-            return null;
-          }
-          
-          const visits = authService.getVisits(patient.id) || [];
+      const savedPatients = localStorage.getItem('medicalScribePatients');
+      if (savedPatients) {
+        const patientsData = JSON.parse(savedPatients);
+        const patientsWithVisits = patientsData.map(patient => {
+          const visitsKey = `visits_${patient.id}`;
+          const savedVisits = localStorage.getItem(visitsKey);
+          const visits = savedVisits ? JSON.parse(savedVisits) : [];
           return { ...patient, visits };
-        } catch (visitError) {
-          console.error(`Error loading visits for patient ${patient?.id}:`, visitError);
-          return { ...patient, visits: [] };
-        }
-      }).filter(Boolean); // Remove null entries
-      
-      console.log('Processed patients with visits:', patientsWithVisits);
-      setPatients(patientsWithVisits);
+        });
+        setPatients(patientsWithVisits);
+      } else {
+        setPatients([]);
+      }
     } catch (error) {
       console.error('Failed to load patients:', error);
       setPatients([]);
-      setStatus('Warning: Could not load patient data - ' + error.message);
     }
   }, []);
 
@@ -593,7 +608,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, []);
 
-  // Patient management with validation
+  // FIXED: Patient management with newPatientData
   const addPatient = useCallback(() => {
     try {
       if (!authService?.hasPermission('add_patients')) {
@@ -601,39 +616,37 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         return;
       }
 
-      if (!newPatient.firstName?.trim() || !newPatient.lastName?.trim() || !newPatient.dateOfBirth?.trim()) {
-        alert('Please fill in all required fields (First Name, Last Name, Date of Birth)');
-        return;
-      }
-
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(newPatient.dateOfBirth)) {
-        alert('Please enter a valid date of birth (YYYY-MM-DD format)');
+      if (!newPatientData.firstName?.trim() || !newPatientData.lastName?.trim() || !newPatientData.dateOfBirth?.trim()) {
+        alert('Please fill in all required fields');
         return;
       }
 
       const patient = {
         id: Date.now(),
-        firstName: newPatient.firstName.trim(),
-        lastName: newPatient.lastName.trim(),
-        dateOfBirth: newPatient.dateOfBirth,
-        medicalHistory: newPatient.medicalHistory?.trim() || '',
-        medications: newPatient.medications?.trim() || '',
+        firstName: newPatientData.firstName.trim(),
+        lastName: newPatientData.lastName.trim(),
+        dateOfBirth: newPatientData.dateOfBirth,
+        medicalHistory: newPatientData.medicalHistory?.trim() || '',
+        medications: newPatientData.medications?.trim() || '',
         visits: [],
         createdAt: new Date().toISOString()
       };
 
-      authService.savePatient(patient);
-      reloadPatients();
-      setNewPatient({ firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: '' });
+      // Save directly to localStorage
+      const existingPatients = JSON.parse(localStorage.getItem('medicalScribePatients') || '[]');
+      existingPatients.push(patient);
+      localStorage.setItem('medicalScribePatients', JSON.stringify(existingPatients));
+      
+      // Reload and update UI
+      loadPatientsFromLocalStorage();
+      setNewPatientData({ firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: '' });
       setShowPatientModal(false);
       setStatus('Patient added successfully');
     } catch (error) {
       console.error('Error adding patient:', error);
-      alert('Failed to save patient: ' + (error.message || 'Unknown error'));
+      alert('Failed to save patient');
     }
-  }, [newPatient, reloadPatients]);
+  }, [newPatientData, loadPatientsFromLocalStorage]);
 
   // Recording functions with comprehensive error handling
   const startRecording = useCallback(async () => {
@@ -1019,21 +1032,13 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         timestamp: new Date().toISOString()
       };
 
-      authService.saveVisit(selectedPatient.id, visit);
-      reloadPatients();
+      // Save visit directly to localStorage
+      const visitsKey = `visits_${selectedPatient.id}`;
+      const existingVisits = JSON.parse(localStorage.getItem(visitsKey) || '[]');
+      existingVisits.push(visit);
+      localStorage.setItem(visitsKey, JSON.stringify(existingVisits));
       
-      // Update selected patient with new visit
-      const updatedPatient = patients.find(p => p.id === selectedPatient.id);
-      if (updatedPatient) {
-        setSelectedPatient({
-          ...updatedPatient,
-          visits: [...(updatedPatient.visits || []), { 
-            ...visit, 
-            createdBy: currentUser?.id, 
-            createdByName: currentUser?.name 
-          }]
-        });
-      }
+      reloadPatients();
       
       setStatus('Visit saved successfully');
       
@@ -1046,7 +1051,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + (error.message || 'Unknown error'));
     }
-  }, [medicalNotes, selectedPatient, transcript, currentUser, patients, reloadPatients, trainingData]);
+  }, [medicalNotes, selectedPatient, transcript, reloadPatients, trainingData]);
 
   // Utility functions
   const getPatientInitials = useCallback((patient) => {
@@ -1100,6 +1105,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       const patient = patients.find(p => p?.id === parsedId);
       console.log('Found patient:', patient);
       setSelectedPatient(patient || null);
+      setPatientSearchTerm(''); // Clear search when patient is selected
     } catch (error) {
       console.error('Error selecting patient:', error);
       setSelectedPatient(null);
@@ -1130,16 +1136,12 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
   // Sidebar render function
   const renderSidebar = () => (
     <div className="sidebar">
-    <div className="sidebar-header">
-  <div className="logo-wrapper">
-    <img 
-      src={require('./assets/aayu-logo.png')} 
-      alt="Aayu Well" 
-      className="logo-image"
-    />
-  </div>
-  <div className="sidebar-title">Aayu Well</div>
-  <div className="sidebar-subtitle">AI SCRIBE</div>
+      <div className="sidebar-header">
+        <div className="logo-wrapper">
+          <div className="logo-placeholder">AW</div>
+        </div>
+        <div className="sidebar-title">Aayu Well</div>
+        <div className="sidebar-subtitle">AI SCRIBE</div>
         {currentUser && (
           <div style={{ 
             marginTop: '12px', 
@@ -1149,8 +1151,8 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
           }}>
             {currentUser.name || 'Unknown User'}
             <br />
-            <span style={{ fontSize: '12px', color: 'var(--aayu-lime)' }}>
-              {(currentUser.role || '').replace('_', ' ').toUpperCase()}
+            <span style={{ fontSize: '12px', color: 'var(--aayu-green-main)' }}>
+              {(currentUser.role || '').replace(/_/g, ' ').toUpperCase()}
             </span>
           </div>
         )}
@@ -1248,18 +1250,18 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                   }}>
                     <div style={{ 
                       padding: '12px', 
-                      backgroundColor: 'var(--aayu-pale-purple)', 
+                      backgroundColor: 'var(--aayu-purple-soft)', 
                       borderRadius: '8px',
-                      border: '2px solid var(--aayu-purple)'
+                      border: '2px solid var(--aayu-purple-main)'
                     }}>
                       <strong>Specialty:</strong><br />
                       {MEDICAL_SPECIALTIES[trainingData.specialty]?.name || 'Unknown'}
                     </div>
                     <div style={{ 
                       padding: '12px', 
-                      backgroundColor: 'var(--aayu-pale-lime)', 
+                      backgroundColor: 'var(--aayu-green-soft)', 
                       borderRadius: '8px',
-                      border: '2px solid var(--aayu-lime)'
+                      border: '2px solid var(--aayu-green-main)'
                     }}>
                       <strong>Note Type:</strong><br />
                       {MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes[trainingData.noteType] || 'Unknown'}
@@ -1268,7 +1270,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                       padding: '12px', 
                       backgroundColor: 'rgba(63, 81, 181, 0.1)', 
                       borderRadius: '8px',
-                      border: '2px solid var(--aayu-navy)'
+                      border: '2px solid var(--aayu-blue-main)'
                     }}>
                       <strong>Training Notes:</strong><br />
                       {trainingData.baselineNotes?.length || 0} examples
@@ -1284,25 +1286,54 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                   </button>
                 </div>
 
-                {/* Patient Selection */}
+                {/* Patient Selection with Search */}
                 <div className="card">
                   <h3 className="card-title">Patient Selection</h3>
                   
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', marginBottom: '16px' }}>
                     <div style={{ flex: 1 }}>
-                      <select 
+                      <input
+                        type="text"
                         className="form-input"
-                        value={selectedPatient?.id || ''}
-                        onChange={(e) => handlePatientSelect(e.target.value)}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <option value="">Select a patient...</option>
-                        {patients.map(patient => (
-                          <option key={patient.id} value={patient.id}>
-                            {patient.firstName} {patient.lastName} - DOB: {patient.dateOfBirth}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Search patient by name..."
+                        value={patientSearchTerm}
+                        onChange={(e) => setPatientSearchTerm(e.target.value)}
+                        style={{ marginBottom: '8px' }}
+                      />
+                      
+                      {patientSearchTerm && filteredPatientsForScribe.length > 0 && (
+                        <div style={{
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          maxHeight: '200px',
+                          overflowY: 'auto',
+                          backgroundColor: 'white',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }}>
+                          {filteredPatientsForScribe.map(patient => (
+                            <div
+                              key={patient.id}
+                              onClick={() => {
+                                setSelectedPatient(patient);
+                                setPatientSearchTerm('');
+                              }}
+                              style={{
+                                padding: '10px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #f0f0f0',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+                              onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                            >
+                              <strong>{patient.firstName} {patient.lastName}</strong>
+                              <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                DOB: {patient.dateOfBirth}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     
                     {authService?.hasPermission('add_patients') && (
@@ -1319,9 +1350,9 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                   {selectedPatient && (
                     <div style={{ 
                       padding: '16px', 
-                      backgroundColor: 'var(--aayu-pale-lime)', 
+                      backgroundColor: 'var(--aayu-green-soft)', 
                       borderRadius: '8px',
-                      border: '2px solid var(--aayu-lime)'
+                      border: '2px solid var(--aayu-green-main)'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                         <div 
@@ -1341,12 +1372,29 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                         >
                           {getPatientInitials(selectedPatient)}
                         </div>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
-                          <div style={{ fontSize: '14px', color: 'var(--aayu-gray)' }}>
+                          <div style={{ fontSize: '14px', color: 'var(--aayu-grey)' }}>
                             DOB: {selectedPatient.dateOfBirth} | Visits: {selectedPatient.visits?.length || 0}
                           </div>
                         </div>
+                        <button
+                          onClick={() => {
+                            setSelectedPatient(null);
+                            setPatientSearchTerm('');
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: 'var(--aayu-coral)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          Clear
+                        </button>
                       </div>
                       
                       {(selectedPatient.medicalHistory || selectedPatient.medications) && (
@@ -1525,9 +1573,9 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
 
                   <div style={{ 
                     padding: '16px', 
-                    backgroundColor: 'var(--aayu-pale-lime)', 
+                    backgroundColor: 'var(--aayu-green-soft)', 
                     borderRadius: '8px',
-                    border: '2px solid var(--aayu-lime)',
+                    border: '2px solid var(--aayu-green-main)',
                     fontSize: '14px'
                   }}>
                     <strong>Current Settings:</strong> {MEDICAL_SPECIALTIES[trainingData.specialty]?.name} - {MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes[trainingData.noteType]}
@@ -1539,7 +1587,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                 {/* Add Baseline Note */}
                 <div className="card">
                   <h3 className="card-title">Add Baseline Note</h3>
-                  <p style={{ color: 'var(--aayu-gray)', marginBottom: '16px' }}>
+                  <p style={{ color: 'var(--aayu-grey)', marginBottom: '16px' }}>
                     Upload examples of your preferred note style. The AI will learn from these to match your documentation preferences.
                   </p>
 
@@ -1583,7 +1631,7 @@ etc.`}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {trainingData.baselineNotes.map((note, index) => (
                         <div key={note.id} style={{ 
-                          border: '2px solid var(--aayu-navy)', 
+                          border: '2px solid var(--aayu-blue-main)', 
                           borderRadius: '8px', 
                           padding: '16px'
                         }}>
@@ -1595,7 +1643,7 @@ etc.`}
                           }}>
                             <div>
                               <strong>Note #{index + 1}</strong>
-                              <div style={{ fontSize: '12px', color: 'var(--aayu-gray)' }}>
+                              <div style={{ fontSize: '12px', color: 'var(--aayu-grey)' }}>
                                 {MEDICAL_SPECIALTIES[note.specialty]?.name} - {MEDICAL_SPECIALTIES[note.specialty]?.noteTypes[note.noteType]}
                                 <br />
                                 Added: {new Date(note.dateAdded).toLocaleDateString()} by {note.addedBy}
@@ -1611,7 +1659,7 @@ etc.`}
                           </div>
                           
                           <div style={{ 
-                            backgroundColor: 'var(--aayu-light-gray)', 
+                            backgroundColor: '#f9fafb', 
                             padding: '12px', 
                             borderRadius: '4px',
                             fontSize: '12px',
@@ -1685,6 +1733,117 @@ etc.`}
           </div>
         );
 
+      case 'settings':
+        return (
+          <div className="content-container">
+            <div className="page-header">
+              <h2 className="page-title">API Settings</h2>
+            </div>
+
+            <div className="card">
+              <h3 className="card-title">Azure Configuration</h3>
+              <p className="settings-description">
+                Configure your Azure Speech and OpenAI services. Keys are stored locally and never transmitted.
+              </p>
+
+              <div className="settings-form">
+                <div className="form-group">
+                  <label className="form-label">Azure Speech Service Key</label>
+                  <input 
+                    type={showApiKeys ? "text" : "password"} 
+                    className="form-input" 
+                    placeholder="Enter your Azure Speech key"
+                    value={apiSettings.speechKey}
+                    onChange={(e) => setApiSettings({...apiSettings, speechKey: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Azure Speech Region</label>
+                  <select 
+                    className="form-input"
+                    value={apiSettings.speechRegion}
+                    onChange={(e) => setApiSettings({...apiSettings, speechRegion: e.target.value})}
+                  >
+                    <option value="eastus">East US</option>
+                    <option value="westus2">West US 2</option>
+                    <option value="centralus">Central US</option>
+                    <option value="westeurope">West Europe</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Azure OpenAI Endpoint</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="https://your-resource.openai.azure.com/"
+                    value={apiSettings.openaiEndpoint}
+                    onChange={(e) => setApiSettings({...apiSettings, openaiEndpoint: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Azure OpenAI API Key</label>
+                  <input 
+                    type={showApiKeys ? "text" : "password"} 
+                    className="form-input" 
+                    placeholder="Enter your OpenAI key"
+                    value={apiSettings.openaiKey}
+                    onChange={(e) => setApiSettings({...apiSettings, openaiKey: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">OpenAI Deployment Name</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="gpt-4"
+                    value={apiSettings.openaiDeployment}
+                    onChange={(e) => setApiSettings({...apiSettings, openaiDeployment: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">API Version</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="2024-08-01-preview"
+                    value={apiSettings.openaiApiVersion}
+                    onChange={(e) => setApiSettings({...apiSettings, openaiApiVersion: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    <input 
+                      type="checkbox" 
+                      checked={showApiKeys}
+                      onChange={(e) => setShowApiKeys(e.target.checked)}
+                      style={{ marginRight: '8px' }}
+                    />
+                    Show API Keys
+                  </label>
+                </div>
+
+                <button className="btn btn-success" onClick={() => saveApiSettings(apiSettings)}>
+                  Save Settings
+                </button>
+                
+                <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--aayu-grey)' }}>
+                  <strong>Current Status:</strong> 
+                  {apiSettings.speechKey && apiSettings.openaiKey ? 
+                    <span style={{ color: 'green' }}> ✓ Configured</span> : 
+                    <span style={{ color: 'red' }}> ✗ Missing required keys</span>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       case 'users':
         return (
           <div className="content-container">
@@ -1695,7 +1854,7 @@ etc.`}
             <div className="card">
               <h3 className="card-title">System Users</h3>
               
-              <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--aayu-pale-lime)', borderRadius: '8px', border: '2px solid var(--aayu-lime)' }}>
+              <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--aayu-green-soft)', borderRadius: '8px', border: '2px solid var(--aayu-green-main)' }}>
                 <strong>Current Users:</strong>
                 <div style={{ marginTop: '8px' }}>
                   • darshan@aayuwell.com - Dr. Darshan Patel (Super Admin)<br />
@@ -1712,7 +1871,7 @@ etc.`}
                 Add New User
               </button>
               
-              <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'rgba(63, 81, 181, 0.05)', borderRadius: '8px', fontSize: '14px', color: 'var(--aayu-gray)' }}>
+              <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'rgba(63, 81, 181, 0.05)', borderRadius: '8px', fontSize: '14px', color: 'var(--aayu-grey)' }}>
                 <strong>Note:</strong> User creation is currently in demo mode. Contact your IT administrator to permanently add users.
               </div>
             </div>
@@ -1746,7 +1905,7 @@ etc.`}
               justifyContent: 'center', 
               alignItems: 'center', 
               height: '100vh',
-              backgroundColor: 'var(--aayu-light-gray)'
+              backgroundColor: '#f9fafb'
             }}>
               <div className="card" style={{ maxWidth: '400px', textAlign: 'center' }}>
                 <h3>Please log in to continue</h3>
@@ -1808,7 +1967,7 @@ etc.`}
               <div style={{ 
                 marginTop: '24px', 
                 padding: '16px', 
-                backgroundColor: 'var(--aayu-pale-lime)',
+                backgroundColor: 'var(--aayu-green-soft)',
                 borderRadius: '8px', 
                 fontSize: '14px', 
                 textAlign: 'center'
@@ -1837,8 +1996,8 @@ etc.`}
                 <input
                   type="text" 
                   className="form-input"
-                  value={newPatient.firstName}
-                  onChange={(e) => setNewPatient({...newPatient, firstName: e.target.value})}
+                  value={newPatientData.firstName}
+                  onChange={(e) => setNewPatientData({...newPatientData, firstName: e.target.value})}
                   placeholder="Enter first name"
                 />
               </div>
@@ -1848,8 +2007,8 @@ etc.`}
                 <input
                   type="text" 
                   className="form-input"
-                  value={newPatient.lastName}
-                  onChange={(e) => setNewPatient({...newPatient, lastName: e.target.value})}
+                  value={newPatientData.lastName}
+                  onChange={(e) => setNewPatientData({...newPatientData, lastName: e.target.value})}
                   placeholder="Enter last name"
                 />
               </div>
@@ -1859,8 +2018,8 @@ etc.`}
                 <input
                   type="date" 
                   className="form-input"
-                  value={newPatient.dateOfBirth}
-                  onChange={(e) => setNewPatient({...newPatient, dateOfBirth: e.target.value})}
+                  value={newPatientData.dateOfBirth}
+                  onChange={(e) => setNewPatientData({...newPatientData, dateOfBirth: e.target.value})}
                 />
               </div>
 
@@ -1868,8 +2027,8 @@ etc.`}
                 <label className="form-label">Medical History</label>
                 <textarea
                   className="form-textarea"
-                  value={newPatient.medicalHistory}
-                  onChange={(e) => setNewPatient({...newPatient, medicalHistory: e.target.value})}
+                  value={newPatientData.medicalHistory}
+                  onChange={(e) => setNewPatientData({...newPatientData, medicalHistory: e.target.value})}
                   placeholder="Enter relevant medical history..."
                 />
               </div>
@@ -1878,8 +2037,8 @@ etc.`}
                 <label className="form-label">Current Medications</label>
                 <textarea
                   className="form-textarea"
-                  value={newPatient.medications}
-                  onChange={(e) => setNewPatient({...newPatient, medications: e.target.value})}
+                  value={newPatientData.medications}
+                  onChange={(e) => setNewPatientData({...newPatientData, medications: e.target.value})}
                   placeholder="List current medications..."
                 />
               </div>
