@@ -11,21 +11,28 @@ const LoginModal = ({
 }) => {
   if (!show) return null;
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(e);
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-logo">
-          <img src={logo} alt="Aayu Well" className="modal-logo-img" />
-        </div>
+        {logo && (
+          <div className="modal-logo">
+            <img src={logo} alt="Aayu Well" className="modal-logo-img" />
+          </div>
+        )}
         <h3 className="modal-title">Sign In</h3>
         <p className="modal-subtitle">Enter your credentials to continue</p>
 
-        <form onSubmit={onSubmit} className="login-form">
+        <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
             <input
               type="text" 
               className="form-input glass-input"
-              value={loginForm.username}
+              value={loginForm.username || ''}
               onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
               placeholder="Username"
               required
@@ -36,7 +43,7 @@ const LoginModal = ({
             <input
               type="password" 
               className="form-input glass-input"
-              value={loginForm.password}
+              value={loginForm.password || ''}
               onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
               placeholder="Password"
               required
