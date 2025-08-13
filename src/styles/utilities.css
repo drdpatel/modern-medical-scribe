@@ -1,0 +1,119 @@
+/* src/styles/utilities.css */
+/* Utility classes and helpers */
+
+/* Text Alignment */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+/* Display */
+.hidden { display: none !important; }
+.visible { display: block !important; }
+
+/* Margins */
+.mt-1 { margin-top: 8px; }
+.mt-2 { margin-top: 16px; }
+.mt-3 { margin-top: 24px; }
+
+.mb-1 { margin-bottom: 8px; }
+.mb-2 { margin-bottom: 16px; }
+.mb-3 { margin-bottom: 24px; }
+
+/* Padding */
+.p-1 { padding: 8px; }
+.p-2 { padding: 16px; }
+.p-3 { padding: 24px; }
+
+/* Width */
+.full-width { width: 100%; }
+.max-width { max-width: 100%; }
+
+/* Accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--primary-navy);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  z-index: var(--z-toast);
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .glass-card {
+    background: white;
+    border: 2px solid black;
+  }
+  
+  .btn {
+    border: 2px solid currentColor;
+  }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .glass-card,
+  .glass-modal,
+  .btn,
+  .form-input {
+    border-width: 0.5px;
+  }
+  
+  .glass-card {
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+  }
+}
+
+/* Print Styles */
+@media print {
+  .sidebar,
+  .modal-backdrop,
+  .btn,
+  .nav-button,
+  .modal-actions,
+  .recording-controls-simple,
+  .action-buttons {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+  }
+  
+  .glass-card {
+    background: white;
+    border: 1px solid #ddd;
+    box-shadow: none;
+  }
+  
+  .main-content {
+    margin: 0;
+    padding: 20px;
+  }
+  
+  .scribe-layout {
+    display: block;
+  }
+  
+  .transcript-container-optimized,
+  .notes-container-optimized {
+    max-height: none;
+    overflow: visible;
+    border: 1px solid #ddd;
+    padding: 10px;
+  }
+  
+  .card {
+    page-break-inside: avoid;
+  }
+  
+  .patient-card-simple {
+    page-break-inside: avoid;
+  }
+}
