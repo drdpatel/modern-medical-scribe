@@ -899,7 +899,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       // Resume recording
       await resumeRecording();
     }
-  }, [isRecording, isPaused]);
+  }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording]);
 
   // FIXED: Recording functions with proper silence handling
   const startRecording = useCallback(async () => {
@@ -1550,7 +1550,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     </div>
   );
 
-  // Updated Scribe Page with simplified controls
+  // Updated Scribe Page with fixed controls and better layout
   const renderScribePage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -1563,10 +1563,10 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         </div>
       ) : (
         <div className="scribe-layout">
-          {/* Combined Left Panel */}
+          {/* Left Panel - Encounter Details and Recording */}
           <div className="scribe-left-panel">
             {/* Encounter Details Card */}
-            <div className="card glass-card">
+            <div className="card glass-card encounter-card">
               <h3 className="card-title">Encounter Details</h3>
               
               {/* Patient Selection */}
@@ -1602,33 +1602,26 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
 
                 {selectedPatient ? (
                   <div className="selected-patient-card">
-                    <div className="patient-info-row">
-                      <div className="patient-avatar-small" style={{ backgroundColor: getAvatarColor(selectedPatient) }}>
-                        {getPatientInitials(selectedPatient)}
-                      </div>
-                      <div className="patient-details">
-                        <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
-                        <div className="patient-meta">
-                          DOB: {selectedPatient.dateOfBirth} ({calculateAge(selectedPatient.dateOfBirth)} yo) | Visits: {selectedPatient.visits?.length || 0}
-                        </div>
-                      </div>
-                      <button
-                        className="btn-icon-small"
+                    <div className="patient-info-compact">
+                      <div 
+                        className="patient-name-clickable"
                         onClick={() => setShowPatientQuickView(true)}
-                        title="View Details"
                       >
-                        👁
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => {
-                          setSelectedPatient(null);
-                          setPatientSearchTerm('');
-                        }}
-                      >
-                        ✕
-                      </button>
+                        <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+                      </div>
+                      <div className="patient-meta">
+                        DOB: {selectedPatient.dateOfBirth} ({calculateAge(selectedPatient.dateOfBirth)} yo) | Visits: {selectedPatient.visits?.length || 0}
+                      </div>
                     </div>
+                    <button
+                      className="btn-icon"
+                      onClick={() => {
+                        setSelectedPatient(null);
+                        setPatientSearchTerm('');
+                      }}
+                    >
+                      ✕
+                    </button>
                   </div>
                 ) : (
                   <div className="no-patient-selected">
@@ -1665,7 +1658,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
             </div>
 
             {/* Recording Controls Card */}
-            <div className="card glass-card">
+            <div className="card glass-card recording-card">
               <h3 className="card-title">Recording Controls</h3>
               
               {isRecording && (
@@ -1674,27 +1667,24 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                 </div>
               )}
               
-              <div className="recording-controls-modern">
+              <div className="recording-controls-simple">
                 <button 
-                  className={`btn-record-toggle ${isRecording && !isPaused ? 'recording' : isPaused ? 'paused' : ''}`}
+                  className={`btn-record-oval ${isRecording && !isPaused ? 'recording' : isPaused ? 'paused' : ''}`}
                   onClick={toggleRecording}
-                  disabled={false}
                 >
-                  {!isRecording && !isPaused ? (
-                    <span className="record-icon">▶</span>
-                  ) : isPaused ? (
-                    <span className="record-icon">▶</span>
-                  ) : (
-                    <span className="record-icon">⏸</span>
-                  )}
+                  {!isRecording && !isPaused ? 
+                    'Start Recording' : 
+                    isPaused ? 
+                    'Resume Recording' : 
+                    'Pause Recording'}
                 </button>
                 
                 <button 
-                  className="btn-stop"
+                  className="btn btn-glass"
                   onClick={stopRecording}
                   disabled={!isRecording && !isPaused}
                 >
-                  ⏹
+                  Stop Recording
                 </button>
               </div>
 
@@ -1951,37 +1941,37 @@ etc.`}
 
         <div className="patient-list">
           {filteredPatients.map(patient => (
-            <div key={patient.id} className="patient-card" onClick={() => {
-              setSelectedPatient(patient);
-              setShowPatientFullView(true);
-              setNewPatientData({
-                firstName: patient.firstName || '',
-                lastName: patient.lastName || '',
-                dateOfBirth: patient.dateOfBirth || '',
-                gender: patient.gender || '',
-                phone: patient.phone || '',
-                email: patient.email || '',
-                address: patient.address || '',
-                city: patient.city || '',
-                state: patient.state || '',
-                zipCode: patient.zipCode || '',
-                emergencyContact: patient.emergencyContact || '',
-                emergencyPhone: patient.emergencyPhone || '',
-                insurance: patient.insurance || '',
-                policyNumber: patient.policyNumber || '',
-                allergies: patient.allergies || '',
-                medicalHistory: patient.medicalHistory || '',
-                medications: patient.medications || '',
-                primaryPhysician: patient.primaryPhysician || '',
-                preferredPharmacy: patient.preferredPharmacy || ''
-              });
-            }}>
-              <div className="patient-avatar" style={{ backgroundColor: getAvatarColor(patient) }}>
-                {getPatientInitials(patient)}
-              </div>
-              
+            <div 
+              key={patient.id} 
+              className="patient-card-simple"
+              onClick={() => {
+                setSelectedPatient(patient);
+                setShowPatientFullView(true);
+                setNewPatientData({
+                  firstName: patient.firstName || '',
+                  lastName: patient.lastName || '',
+                  dateOfBirth: patient.dateOfBirth || '',
+                  gender: patient.gender || '',
+                  phone: patient.phone || '',
+                  email: patient.email || '',
+                  address: patient.address || '',
+                  city: patient.city || '',
+                  state: patient.state || '',
+                  zipCode: patient.zipCode || '',
+                  emergencyContact: patient.emergencyContact || '',
+                  emergencyPhone: patient.emergencyPhone || '',
+                  insurance: patient.insurance || '',
+                  policyNumber: patient.policyNumber || '',
+                  allergies: patient.allergies || '',
+                  medicalHistory: patient.medicalHistory || '',
+                  medications: patient.medications || '',
+                  primaryPhysician: patient.primaryPhysician || '',
+                  preferredPharmacy: patient.preferredPharmacy || ''
+                });
+              }}
+            >
               <div className="patient-info">
-                <div className="patient-name">{patient.firstName} {patient.lastName}</div>
+                <div className="patient-name-clickable">{patient.firstName} {patient.lastName}</div>
                 <div className="patient-id">Patient ID: {patient.id}</div>
                 <div className="patient-dob">DOB: {patient.dateOfBirth} ({calculateAge(patient.dateOfBirth)} yo)</div>
                 {patient.phone && <div className="patient-contact">Phone: {patient.phone}</div>}
