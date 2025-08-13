@@ -1,0 +1,181 @@
+/* src/styles/buttons.css */
+/* All button styles and variants */
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-medium);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--touch-target-optimal);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Glass variants */
+.btn-glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  color: var(--primary-navy);
+  box-shadow: 0 4px 15px 0 rgba(31, 38, 135, 0.1);
+}
+
+.btn-glass:hover:not(:disabled) {
+  background: var(--glass-bg-heavy);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(31, 38, 135, 0.2);
+}
+
+.btn-glass:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-glass-primary {
+  background: rgba(186, 230, 55, 0.8);
+  backdrop-filter: var(--blur);
+  border: 1px solid rgba(186, 230, 55, 0.3);
+  color: var(--primary-navy);
+  box-shadow: 0 4px 15px 0 rgba(186, 230, 55, 0.3);
+}
+
+.btn-glass-primary:hover:not(:disabled) {
+  background: rgba(186, 230, 55, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(186, 230, 55, 0.4);
+}
+
+.btn-glass-accent {
+  background: rgba(155, 47, 205, 0.8);
+  backdrop-filter: var(--blur);
+  border: 1px solid rgba(155, 47, 205, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px 0 rgba(155, 47, 205, 0.3);
+}
+
+.btn-glass-success {
+  background: rgba(16, 185, 129, 0.8);
+  backdrop-filter: var(--blur);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px 0 rgba(16, 185, 129, 0.3);
+}
+
+/* Size variants */
+.btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+  min-height: 36px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* Text button */
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--accent-purple);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.btn-text:hover {
+  background: rgba(155, 47, 205, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Icon button */
+.btn-icon {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-icon:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: scale(1.1);
+}
+
+/* Recording button */
+.btn-record-oval {
+  padding: 14px 32px;
+  border-radius: 50px;
+  background: var(--primary-green);
+  border: 2px solid rgba(186, 230, 55, 0.3);
+  color: var(--primary-navy);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 15px rgba(186, 230, 55, 0.3);
+  min-width: 180px;
+  text-align: center;
+}
+
+.btn-record-oval:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 20px rgba(186, 230, 55, 0.4);
+}
+
+.btn-record-oval:active {
+  transform: scale(0.98);
+}
+
+.btn-record-oval.recording {
+  background: var(--error);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+  animation: pulse 2s infinite;
+}
+
+.btn-record-oval.paused {
+  background: var(--warning);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover {
+    transform: none;
+  }
+  
+  .btn:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+}
