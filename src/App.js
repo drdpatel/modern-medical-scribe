@@ -887,21 +887,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, [selectedPatient, newPatientData, loadPatientsFromLocalStorage]);
 
-  // Toggle recording (play/pause in one button)
-  const toggleRecording = useCallback(async () => {
-    if (!isRecording && !isPaused) {
-      // Start recording
-      await startRecording();
-    } else if (isRecording && !isPaused) {
-      // Pause recording
-      pauseRecording();
-    } else if (isPaused) {
-      // Resume recording
-      await resumeRecording();
-    }
-  }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording]);
-
-  // FIXED: Recording functions with proper silence handling
+  // FIXED: Recording functions with proper silence handling - PROPER ORDER
   const startRecording = useCallback(async () => {
     try {
       if (!authService?.hasPermission('scribe')) {
@@ -1214,6 +1200,20 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       cleanupSpeechRecognizer();
     }
   }, [cleanupSpeechRecognizer]);
+
+  // Toggle recording (play/pause in one button) - NOW AFTER ITS DEPENDENCIES
+  const toggleRecording = useCallback(async () => {
+    if (!isRecording && !isPaused) {
+      // Start recording
+      await startRecording();
+    } else if (isRecording && !isPaused) {
+      // Pause recording
+      pauseRecording();
+    } else if (isPaused) {
+      // Resume recording
+      await resumeRecording();
+    }
+  }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording]);
 
   // AI note generation with better error handling
   const generateNotes = useCallback(async () => {
