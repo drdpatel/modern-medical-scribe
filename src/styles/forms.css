@@ -1,0 +1,133 @@
+/* src/styles/forms.css */
+/* Form inputs, textareas, selects, and form layouts */
+
+.form-input,
+.form-textarea,
+.form-select {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-medium);
+  font-size: 16px; /* Prevents zoom on iOS */
+  font-family: inherit;
+  transition: all var(--transition-base);
+  min-height: var(--touch-target-optimal);
+}
+
+.glass-input {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  color: var(--primary-navy);
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px rgba(186, 230, 55, 0.1);
+  background: var(--glass-bg-heavy);
+}
+
+.glass-input::placeholder {
+  color: var(--gray-medium);
+}
+
+.form-textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--primary-navy);
+  font-size: 14px;
+}
+
+/* Search input */
+.search-input {
+  width: 100%;
+  padding: 14px 20px;
+  border: 1px solid rgba(39, 38, 107, 0.1);
+  border-radius: var(--radius-medium);
+  background: var(--white);
+  font-size: 16px;
+  color: var(--black);
+  margin-bottom: 16px;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+  box-shadow: var(--glass-shadow);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px rgba(186, 230, 55, 0.1);
+}
+
+/* Form sections for patient modal */
+.patient-form-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.form-section {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-medium);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.form-section-title {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-navy);
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-green);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Login form */
+.login-form {
+  width: 100%;
+}
+
+/* Settings form */
+.settings-form {
+  max-width: 600px;
+}
+
+.settings-description {
+  color: var(--gray-dark);
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+/* Checkbox styles */
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* Error message */
+.error-message {
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: var(--error);
+  font-size: 14px;
+  margin-bottom: 16px;
+  animation: shake 0.5s;
+}
