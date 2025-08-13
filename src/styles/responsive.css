@@ -1,0 +1,328 @@
+/* src/styles/responsive.css */
+/* All responsive design and media queries */
+
+/* Tablet Optimization (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+  
+  .sidebar-header {
+    padding: 24px 16px;
+  }
+  
+  .nav-button {
+    font-size: 14px;
+    padding: 12px 16px;
+  }
+  
+  .scribe-layout {
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+  }
+  
+  .card {
+    padding: 24px;
+  }
+  
+  .patient-modal-large {
+    width: 90vw;
+    padding: 24px;
+  }
+  
+  .form-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .btn {
+    min-height: 48px;
+    font-size: 14px;
+  }
+}
+
+/* Mobile Optimization (< 768px) */
+@media (max-width: 767px) {
+  .app-container {
+    flex-direction: column-reverse;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: var(--safe-bottom);
+    z-index: var(--z-sticky);
+  }
+  
+  .sidebar-header {
+    display: none;
+  }
+  
+  .sidebar-nav {
+    display: flex;
+    flex-direction: row;
+    padding: 8px;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .nav-button {
+    min-width: 80px;
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  
+  .nav-button:hover {
+    padding-left: 12px;
+  }
+  
+  .nav-button.active::after {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    top: auto;
+  }
+  
+  .sidebar-footer {
+    display: none;
+  }
+  
+  .main-content {
+    padding-bottom: 80px;
+  }
+  
+  .content-container {
+    padding: 20px;
+  }
+  
+  .scribe-layout {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .scribe-left-panel,
+  .scribe-right-panel {
+    width: 100%;
+  }
+  
+  .btn {
+    min-height: 48px;
+    font-size: 16px;
+    padding: 14px 20px;
+  }
+  
+  .btn-small {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  
+  .modal-backdrop {
+    padding: 0;
+  }
+  
+  .modal-content,
+  .glass-modal,
+  .patient-modal-large {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    padding: 20px;
+    padding-top: calc(20px + var(--safe-top));
+    padding-bottom: calc(20px + var(--safe-bottom));
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-input,
+  .form-textarea,
+  .form-select {
+    font-size: 16px;
+    padding: 14px 16px;
+  }
+  
+  .login-card {
+    padding: 32px 24px;
+  }
+  
+  .login-logo {
+    width: 100px;
+    height: 50px;
+  }
+  
+  .login-title {
+    font-size: 24px;
+  }
+  
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  
+  .profile-section {
+    padding: 16px;
+  }
+  
+  .note-metadata {
+    grid-template-columns: 1fr;
+  }
+  
+  .search-dropdown {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    max-height: 60vh;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .page-title {
+    font-size: 24px;
+  }
+  
+  .transcript-container-optimized,
+  .notes-container-optimized {
+    max-height: 300px;
+    padding: 16px;
+  }
+  
+  .empty-state {
+    padding: 32px 16px;
+    font-size: 14px;
+  }
+}
+
+/* Small Mobile Optimization (< 400px) */
+@media (max-width: 399px) {
+  .nav-button {
+    min-width: 70px;
+    font-size: 11px;
+    padding: 8px;
+  }
+  
+  .card {
+    padding: 16px;
+  }
+  
+  .card-title {
+    font-size: 16px;
+  }
+  
+  .btn {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+  
+  .modal-content,
+  .glass-modal {
+    padding: 16px;
+  }
+}
+
+/* Landscape Mobile Optimization */
+@media (max-width: 767px) and (orientation: landscape) {
+  .sidebar {
+    height: 60px;
+  }
+  
+  .sidebar-nav {
+    padding: 4px;
+  }
+  
+  .nav-button {
+    padding: 6px 10px;
+    min-height: 40px;
+  }
+  
+  .main-content {
+    padding-bottom: 60px;
+  }
+  
+  .modal-content,
+  .glass-modal {
+    max-height: 90vh;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover,
+  .nav-button:hover,
+  .patient-card-simple:hover {
+    transform: none;
+  }
+  
+  .btn:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+  
+  .patient-card-simple:active {
+    transform: scale(0.99);
+    background: var(--glass-bg-heavy);
+  }
+  
+  .btn,
+  .form-input,
+  .form-textarea,
+  .form-select {
+    min-height: 48px;
+  }
+  
+  .form-group {
+    margin-bottom: 24px;
+  }
+  
+  .search-dropdown-item {
+    min-height: 48px;
+    padding: 14px;
+  }
+}
+
+/* Responsive Visibility */
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 768px) {
+  .show-mobile { display: none !important; }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .hide-tablet { display: none !important; }
+}
+
+@media (min-width: 1025px) {
+  .hide-desktop { display: none !important; }
+}
