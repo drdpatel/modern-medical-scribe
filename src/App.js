@@ -3,6 +3,7 @@ import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
 import './App.css';
+
 // Conditional logo import with fallback
 let aayuLogo;
 try {
@@ -197,10 +198,33 @@ function App() {
   const [showPatientModal, setShowPatientModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [showPatientQuickView, setShowPatientQuickView] = useState(false);
+  const [showPatientFullView, setShowPatientFullView] = useState(false);
+  const [showNoteQuickView, setShowNoteQuickView] = useState(false);
+  const [selectedNoteForView, setSelectedNoteForView] = useState(null);
+  const [isEditingPatient, setIsEditingPatient] = useState(false);
   
-  // New patient form state
+  // Enhanced patient form state with more fields
   const [newPatientData, setNewPatientData] = useState({
-    firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: ''
+    firstName: '', 
+    lastName: '', 
+    dateOfBirth: '', 
+    gender: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    emergencyContact: '',
+    emergencyPhone: '',
+    insurance: '',
+    policyNumber: '',
+    allergies: '',
+    medicalHistory: '', 
+    medications: '',
+    primaryPhysician: '',
+    preferredPharmacy: ''
   });
 
   // Recording states
@@ -250,7 +274,9 @@ function App() {
       if (!patient) return false;
       const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
       const dob = patient.dateOfBirth || '';
-      return fullName.includes(term) || dob.includes(term);
+      const phone = patient.phone || '';
+      const email = (patient.email || '').toLowerCase();
+      return fullName.includes(term) || dob.includes(term) || phone.includes(term) || email.includes(term);
     });
   }, [patients, searchTerm]);
 
@@ -800,11 +826,9 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
 
       const patient = {
         id: Date.now(),
+        ...newPatientData,
         firstName: newPatientData.firstName.trim(),
         lastName: newPatientData.lastName.trim(),
-        dateOfBirth: newPatientData.dateOfBirth,
-        medicalHistory: newPatientData.medicalHistory?.trim() || '',
-        medications: newPatientData.medications?.trim() || '',
         visits: [],
         createdAt: new Date().toISOString()
       };
@@ -814,7 +838,12 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       localStorage.setItem('medicalScribePatients', JSON.stringify(existingPatients));
       
       loadPatientsFromLocalStorage();
-      setNewPatientData({ firstName: '', lastName: '', dateOfBirth: '', medicalHistory: '', medications: '' });
+      setNewPatientData({ 
+        firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '',
+        address: '', city: '', state: '', zipCode: '', emergencyContact: '', emergencyPhone: '',
+        insurance: '', policyNumber: '', allergies: '', medicalHistory: '', medications: '',
+        primaryPhysician: '', preferredPharmacy: ''
+      });
       setShowPatientModal(false);
       setStatus('Patient added successfully');
     } catch (error) {
@@ -822,6 +851,55 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       alert('Failed to save patient: ' + error.message);
     }
   }, [newPatientData, loadPatientsFromLocalStorage]);
+
+  // Update patient function
+  const updatePatient = useCallback(() => {
+    try {
+      if (!selectedPatient) return;
+
+      const existingPatients = JSON.parse(localStorage.getItem('medicalScribePatients') || '[]');
+      const patientIndex = existingPatients.findIndex(p => p.id === selectedPatient.id);
+      
+      if (patientIndex === -1) {
+        alert('Patient not found');
+        return;
+      }
+
+      // Update patient data
+      existingPatients[patientIndex] = {
+        ...existingPatients[patientIndex],
+        ...newPatientData,
+        id: selectedPatient.id,
+        visits: selectedPatient.visits,
+        createdAt: selectedPatient.createdAt,
+        updatedAt: new Date().toISOString()
+      };
+
+      localStorage.setItem('medicalScribePatients', JSON.stringify(existingPatients));
+      
+      loadPatientsFromLocalStorage();
+      setSelectedPatient(existingPatients[patientIndex]);
+      setIsEditingPatient(false);
+      setStatus('Patient updated successfully');
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      alert('Failed to update patient: ' + error.message);
+    }
+  }, [selectedPatient, newPatientData, loadPatientsFromLocalStorage]);
+
+  // Toggle recording (play/pause in one button)
+  const toggleRecording = useCallback(async () => {
+    if (!isRecording && !isPaused) {
+      // Start recording
+      await startRecording();
+    } else if (isRecording && !isPaused) {
+      // Pause recording
+      pauseRecording();
+    } else if (isPaused) {
+      // Resume recording
+      await resumeRecording();
+    }
+  }, [isRecording, isPaused]);
 
   // FIXED: Recording functions with proper silence handling
   const startRecording = useCallback(async () => {
@@ -1167,6 +1245,8 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
 PATIENT CONTEXT:
 Name: ${selectedPatient.firstName || ''} ${selectedPatient.lastName || ''}
 DOB: ${selectedPatient.dateOfBirth || 'Not specified'}
+Gender: ${selectedPatient.gender || 'Not specified'}
+Allergies: ${selectedPatient.allergies || 'NKDA'}
 Medical History: ${selectedPatient.medicalHistory || 'No significant medical history recorded'}
 Current Medications: ${selectedPatient.medications || 'No current medications recorded'}
 
@@ -1363,6 +1443,19 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     }
   }, [patients]);
 
+  // Calculate patient age
+  const calculateAge = useCallback((dob) => {
+    if (!dob) return '';
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  }, []);
+
   // Loading screen
   if (isLoading) {
     return (
@@ -1380,10 +1473,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     );
   }
 
-  // Rest of the component remains the same as before...
-  // [Include all the render functions from the previous code]
-  // I'll continue with just the key render functions that have changes
-
+  // Continue with render functions...
   // Sidebar render function
   const renderSidebar = () => (
     <div className="sidebar">
@@ -1455,12 +1545,12 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       <div className="sidebar-footer">
         Secure • HIPAA Compliant
         <br />
-        Medical Scribe AI v2.2
+        Medical Scribe AI v2.3
       </div>
     </div>
   );
 
-  // Updated Scribe Page with recording duration display
+  // Updated Scribe Page with simplified controls
   const renderScribePage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -1475,9 +1565,9 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         <div className="scribe-layout">
           {/* Combined Left Panel */}
           <div className="scribe-left-panel">
-            {/* Patient & AI Configuration Card */}
+            {/* Encounter Details Card */}
             <div className="card glass-card">
-              <h3 className="card-title">Session Configuration</h3>
+              <h3 className="card-title">Encounter Details</h3>
               
               {/* Patient Selection */}
               <div className="config-section">
@@ -1519,9 +1609,16 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                       <div className="patient-details">
                         <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
                         <div className="patient-meta">
-                          DOB: {selectedPatient.dateOfBirth} | Visits: {selectedPatient.visits?.length || 0}
+                          DOB: {selectedPatient.dateOfBirth} ({calculateAge(selectedPatient.dateOfBirth)} yo) | Visits: {selectedPatient.visits?.length || 0}
                         </div>
                       </div>
+                      <button
+                        className="btn-icon-small"
+                        onClick={() => setShowPatientQuickView(true)}
+                        title="View Details"
+                      >
+                        👁
+                      </button>
                       <button
                         className="btn-icon"
                         onClick={() => {
@@ -1549,29 +1646,21 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                 )}
               </div>
 
-              {/* AI Configuration */}
+              {/* Note Type Selection */}
               <div className="config-section">
-                <label className="section-label">AI Configuration</label>
-                <div className="ai-config-grid">
-                  <div className="config-item">
-                    <span className="config-label">Specialty:</span>
-                    <span className="config-value">{MEDICAL_SPECIALTIES[trainingData.specialty]?.name}</span>
-                  </div>
-                  <div className="config-item">
-                    <span className="config-label">Note Type:</span>
-                    <span className="config-value">{MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes[trainingData.noteType]}</span>
-                  </div>
-                  <div className="config-item">
-                    <span className="config-label">Training Notes:</span>
-                    <span className="config-value">{trainingData.baselineNotes?.length || 0} examples</span>
-                  </div>
-                </div>
-                <button 
-                  className="btn btn-glass btn-small"
-                  onClick={() => setActiveTab('training')}
+                <label className="section-label">Note Type</label>
+                <select 
+                  className="form-input glass-input"
+                  value={trainingData.noteType}
+                  onChange={(e) => {
+                    const newData = { ...trainingData, noteType: e.target.value };
+                    saveTrainingData(newData);
+                  }}
                 >
-                  Configure Training
-                </button>
+                  {Object.entries(MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes || {}).map(([key, name]) => (
+                    <option key={key} value={key}>{name}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1585,39 +1674,27 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                 </div>
               )}
               
-              <div className="recording-controls-optimized">
+              <div className="recording-controls-modern">
                 <button 
-                  className={`btn btn-glass-primary ${isRecording && !isPaused ? 'recording' : ''}`}
-                  onClick={startRecording}
-                  disabled={isRecording || isPaused}
+                  className={`btn-record-toggle ${isRecording && !isPaused ? 'recording' : isPaused ? 'paused' : ''}`}
+                  onClick={toggleRecording}
+                  disabled={false}
                 >
-                  {isRecording ? '● Recording...' : '○ Start Recording'}
+                  {!isRecording && !isPaused ? (
+                    <span className="record-icon">▶</span>
+                  ) : isPaused ? (
+                    <span className="record-icon">▶</span>
+                  ) : (
+                    <span className="record-icon">⏸</span>
+                  )}
                 </button>
                 
-                {isRecording && !isPaused && (
-                  <button 
-                    className="btn btn-glass"
-                    onClick={pauseRecording}
-                  >
-                    ⏸ Pause
-                  </button>
-                )}
-                
-                {isPaused && (
-                  <button 
-                    className="btn btn-glass-primary"
-                    onClick={resumeRecording}
-                  >
-                    ▶ Resume
-                  </button>
-                )}
-                
                 <button 
-                  className="btn btn-glass"
+                  className="btn-stop"
                   onClick={stopRecording}
                   disabled={!isRecording && !isPaused}
                 >
-                  ⏹ Stop
+                  ⏹
                 </button>
               </div>
 
@@ -1684,10 +1761,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     </div>
   );
 
-  // Rest of the render functions remain the same...
-  // [Include all other page renders from previous code]
-
-  // Render all pages functions
+  // Continue with other render functions...
   const renderTrainingPage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -1868,7 +1942,7 @@ etc.`}
         <input
           type="text"
           className="search-input"
-          placeholder="Search patients by name or date of birth..."
+          placeholder="Search patients by name, date of birth, phone, or email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -1879,7 +1953,28 @@ etc.`}
           {filteredPatients.map(patient => (
             <div key={patient.id} className="patient-card" onClick={() => {
               setSelectedPatient(patient);
-              setShowVisitModal(true);
+              setShowPatientFullView(true);
+              setNewPatientData({
+                firstName: patient.firstName || '',
+                lastName: patient.lastName || '',
+                dateOfBirth: patient.dateOfBirth || '',
+                gender: patient.gender || '',
+                phone: patient.phone || '',
+                email: patient.email || '',
+                address: patient.address || '',
+                city: patient.city || '',
+                state: patient.state || '',
+                zipCode: patient.zipCode || '',
+                emergencyContact: patient.emergencyContact || '',
+                emergencyPhone: patient.emergencyPhone || '',
+                insurance: patient.insurance || '',
+                policyNumber: patient.policyNumber || '',
+                allergies: patient.allergies || '',
+                medicalHistory: patient.medicalHistory || '',
+                medications: patient.medications || '',
+                primaryPhysician: patient.primaryPhysician || '',
+                preferredPharmacy: patient.preferredPharmacy || ''
+              });
             }}>
               <div className="patient-avatar" style={{ backgroundColor: getAvatarColor(patient) }}>
                 {getPatientInitials(patient)}
@@ -1888,7 +1983,8 @@ etc.`}
               <div className="patient-info">
                 <div className="patient-name">{patient.firstName} {patient.lastName}</div>
                 <div className="patient-id">Patient ID: {patient.id}</div>
-                <div className="patient-dob">DOB: {patient.dateOfBirth}</div>
+                <div className="patient-dob">DOB: {patient.dateOfBirth} ({calculateAge(patient.dateOfBirth)} yo)</div>
+                {patient.phone && <div className="patient-contact">Phone: {patient.phone}</div>}
               </div>
               
               <div className="patient-visits">{patient.visits?.length || 0} visits</div>
@@ -2152,10 +2248,10 @@ etc.`}
           </div>
         )}
 
-        {/* Patient Modal */}
+        {/* Enhanced Patient Modal with More Fields */}
         {showPatientModal && (
           <div className="modal-backdrop" onClick={() => setShowPatientModal(false)}>
-            <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content glass-modal patient-modal-large" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div>
                   <h3 className="modal-title">Add New Patient</h3>
@@ -2164,56 +2260,247 @@ etc.`}
                 <button className="modal-close" onClick={() => setShowPatientModal(false)}>×</button>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">First Name *</label>
-                <input
-                  type="text" 
-                  className="form-input glass-input"
-                  value={newPatientData.firstName}
-                  onChange={(e) => setNewPatientData({...newPatientData, firstName: e.target.value})}
-                  placeholder="Enter first name"
-                />
-              </div>
+              <div className="patient-form-grid">
+                <div className="form-section">
+                  <h4 className="form-section-title">Basic Information</h4>
+                  
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">First Name *</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.firstName}
+                        onChange={(e) => setNewPatientData({...newPatientData, firstName: e.target.value})}
+                        placeholder="Enter first name"
+                      />
+                    </div>
 
-              <div className="form-group">
-                <label className="form-label">Last Name *</label>
-                <input
-                  type="text" 
-                  className="form-input glass-input"
-                  value={newPatientData.lastName}
-                  onChange={(e) => setNewPatientData({...newPatientData, lastName: e.target.value})}
-                  placeholder="Enter last name"
-                />
-              </div>
+                    <div className="form-group">
+                      <label className="form-label">Last Name *</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.lastName}
+                        onChange={(e) => setNewPatientData({...newPatientData, lastName: e.target.value})}
+                        placeholder="Enter last name"
+                      />
+                    </div>
+                  </div>
 
-              <div className="form-group">
-                <label className="form-label">Date of Birth *</label>
-                <input
-                  type="date" 
-                  className="form-input glass-input"
-                  value={newPatientData.dateOfBirth}
-                  onChange={(e) => setNewPatientData({...newPatientData, dateOfBirth: e.target.value})}
-                />
-              </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Date of Birth *</label>
+                      <input
+                        type="date" 
+                        className="form-input glass-input"
+                        value={newPatientData.dateOfBirth}
+                        onChange={(e) => setNewPatientData({...newPatientData, dateOfBirth: e.target.value})}
+                      />
+                    </div>
 
-              <div className="form-group">
-                <label className="form-label">Medical History</label>
-                <textarea
-                  className="form-textarea glass-input"
-                  value={newPatientData.medicalHistory}
-                  onChange={(e) => setNewPatientData({...newPatientData, medicalHistory: e.target.value})}
-                  placeholder="Enter relevant medical history..."
-                />
-              </div>
+                    <div className="form-group">
+                      <label className="form-label">Gender</label>
+                      <select 
+                        className="form-input glass-input"
+                        value={newPatientData.gender}
+                        onChange={(e) => setNewPatientData({...newPatientData, gender: e.target.value})}
+                      >
+                        <option value="">Select...</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Current Medications</label>
-                <textarea
-                  className="form-textarea glass-input"
-                  value={newPatientData.medications}
-                  onChange={(e) => setNewPatientData({...newPatientData, medications: e.target.value})}
-                  placeholder="List current medications..."
-                />
+                <div className="form-section">
+                  <h4 className="form-section-title">Contact Information</h4>
+                  
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Phone</label>
+                      <input
+                        type="tel" 
+                        className="form-input glass-input"
+                        value={newPatientData.phone}
+                        onChange={(e) => setNewPatientData({...newPatientData, phone: e.target.value})}
+                        placeholder="(555) 123-4567"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Email</label>
+                      <input
+                        type="email" 
+                        className="form-input glass-input"
+                        value={newPatientData.email}
+                        onChange={(e) => setNewPatientData({...newPatientData, email: e.target.value})}
+                        placeholder="patient@email.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Address</label>
+                    <input
+                      type="text" 
+                      className="form-input glass-input"
+                      value={newPatientData.address}
+                      onChange={(e) => setNewPatientData({...newPatientData, address: e.target.value})}
+                      placeholder="123 Main Street"
+                    />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">City</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.city}
+                        onChange={(e) => setNewPatientData({...newPatientData, city: e.target.value})}
+                        placeholder="City"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">State</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.state}
+                        onChange={(e) => setNewPatientData({...newPatientData, state: e.target.value})}
+                        placeholder="IL"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">ZIP</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.zipCode}
+                        onChange={(e) => setNewPatientData({...newPatientData, zipCode: e.target.value})}
+                        placeholder="60169"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-section">
+                  <h4 className="form-section-title">Emergency & Insurance</h4>
+                  
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Emergency Contact</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.emergencyContact}
+                        onChange={(e) => setNewPatientData({...newPatientData, emergencyContact: e.target.value})}
+                        placeholder="Name of emergency contact"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Emergency Phone</label>
+                      <input
+                        type="tel" 
+                        className="form-input glass-input"
+                        value={newPatientData.emergencyPhone}
+                        onChange={(e) => setNewPatientData({...newPatientData, emergencyPhone: e.target.value})}
+                        placeholder="(555) 123-4567"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Insurance Provider</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.insurance}
+                        onChange={(e) => setNewPatientData({...newPatientData, insurance: e.target.value})}
+                        placeholder="Insurance company name"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Policy Number</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.policyNumber}
+                        onChange={(e) => setNewPatientData({...newPatientData, policyNumber: e.target.value})}
+                        placeholder="Policy #"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-section">
+                  <h4 className="form-section-title">Medical Information</h4>
+                  
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Primary Physician</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.primaryPhysician}
+                        onChange={(e) => setNewPatientData({...newPatientData, primaryPhysician: e.target.value})}
+                        placeholder="Dr. Smith"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Preferred Pharmacy</label>
+                      <input
+                        type="text" 
+                        className="form-input glass-input"
+                        value={newPatientData.preferredPharmacy}
+                        onChange={(e) => setNewPatientData({...newPatientData, preferredPharmacy: e.target.value})}
+                        placeholder="CVS on Main St"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Allergies</label>
+                    <textarea
+                      className="form-textarea glass-input"
+                      value={newPatientData.allergies}
+                      onChange={(e) => setNewPatientData({...newPatientData, allergies: e.target.value})}
+                      placeholder="List any known allergies..."
+                      rows="2"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Medical History</label>
+                    <textarea
+                      className="form-textarea glass-input"
+                      value={newPatientData.medicalHistory}
+                      onChange={(e) => setNewPatientData({...newPatientData, medicalHistory: e.target.value})}
+                      placeholder="Enter relevant medical history..."
+                      rows="3"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Current Medications</label>
+                    <textarea
+                      className="form-textarea glass-input"
+                      value={newPatientData.medications}
+                      onChange={(e) => setNewPatientData({...newPatientData, medications: e.target.value})}
+                      placeholder="List current medications..."
+                      rows="3"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="modal-actions">
@@ -2226,59 +2513,376 @@ etc.`}
           </div>
         )}
 
-        {/* Visit Modal */}
-        {showVisitModal && selectedPatient && (
-          <div className="modal-backdrop" onClick={() => setShowVisitModal(false)}>
-            <div className="modal-content glass-modal" style={{ maxWidth: '800px' }} onClick={(e) => e.stopPropagation()}>
+        {/* Patient Quick View Modal */}
+        {showPatientQuickView && selectedPatient && (
+          <div className="modal-backdrop" onClick={() => setShowPatientQuickView(false)}>
+            <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div>
                   <h3 className="modal-title">{selectedPatient.firstName} {selectedPatient.lastName}</h3>
-                  <p className="modal-subtitle">Patient Record</p>
+                  <p className="modal-subtitle">Quick View</p>
                 </div>
-                <button className="modal-close" onClick={() => setShowVisitModal(false)}>×</button>
+                <button className="modal-close" onClick={() => setShowPatientQuickView(false)}>×</button>
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
-                <strong>DOB:</strong> {selectedPatient.dateOfBirth}<br />
-                <strong>Patient ID:</strong> {selectedPatient.id}<br />
-                {selectedPatient.medicalHistory && (
-                  <><strong>Medical History:</strong> {selectedPatient.medicalHistory}<br /></>
-                )}
-                {selectedPatient.medications && (
-                  <><strong>Medications:</strong> {selectedPatient.medications}</>
-                )}
+              <div className="patient-quick-view">
+                <div className="info-grid">
+                  <div className="info-item">
+                    <span className="info-label">DOB:</span>
+                    <span className="info-value">{selectedPatient.dateOfBirth} ({calculateAge(selectedPatient.dateOfBirth)} yo)</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Gender:</span>
+                    <span className="info-value">{selectedPatient.gender || 'Not specified'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Phone:</span>
+                    <span className="info-value">{selectedPatient.phone || 'Not provided'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Email:</span>
+                    <span className="info-value">{selectedPatient.email || 'Not provided'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Insurance:</span>
+                    <span className="info-value">{selectedPatient.insurance || 'Not provided'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Allergies:</span>
+                    <span className="info-value">{selectedPatient.allergies || 'NKDA'}</span>
+                  </div>
+                </div>
+
+                <div className="modal-actions">
+                  <button 
+                    className="btn btn-glass-primary"
+                    onClick={() => {
+                      setShowPatientQuickView(false);
+                      setShowPatientFullView(true);
+                      setNewPatientData({
+                        firstName: selectedPatient.firstName || '',
+                        lastName: selectedPatient.lastName || '',
+                        dateOfBirth: selectedPatient.dateOfBirth || '',
+                        gender: selectedPatient.gender || '',
+                        phone: selectedPatient.phone || '',
+                        email: selectedPatient.email || '',
+                        address: selectedPatient.address || '',
+                        city: selectedPatient.city || '',
+                        state: selectedPatient.state || '',
+                        zipCode: selectedPatient.zipCode || '',
+                        emergencyContact: selectedPatient.emergencyContact || '',
+                        emergencyPhone: selectedPatient.emergencyPhone || '',
+                        insurance: selectedPatient.insurance || '',
+                        policyNumber: selectedPatient.policyNumber || '',
+                        allergies: selectedPatient.allergies || '',
+                        medicalHistory: selectedPatient.medicalHistory || '',
+                        medications: selectedPatient.medications || '',
+                        primaryPhysician: selectedPatient.primaryPhysician || '',
+                        preferredPharmacy: selectedPatient.preferredPharmacy || ''
+                      });
+                    }}
+                  >
+                    View Full Profile
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Patient Full View / Edit Modal */}
+        {showPatientFullView && selectedPatient && (
+          <div className="modal-backdrop" onClick={() => setShowPatientFullView(false)}>
+            <div className="modal-content glass-modal patient-modal-large" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">
+                    {isEditingPatient ? 'Edit Patient' : 'Patient Profile'}
+                  </h3>
+                  <p className="modal-subtitle">
+                    ID: {selectedPatient.id}
+                  </p>
+                </div>
+                <button className="modal-close" onClick={() => {
+                  setShowPatientFullView(false);
+                  setIsEditingPatient(false);
+                }}>×</button>
               </div>
 
-              <h4 style={{ marginBottom: '16px' }}>Visit History</h4>
-              
-              {selectedPatient.visits?.length > 0 ? (
-                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                  {selectedPatient.visits.map(visit => (
-                    <div key={visit.id} style={{ 
-                      padding: '16px', 
-                      marginBottom: '12px', 
-                      background: 'rgba(0, 0, 0, 0.02)', 
-                      borderRadius: '8px',
-                      border: '1px solid rgba(0, 0, 0, 0.1)'
-                    }}>
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>{visit.date} at {visit.time}</strong>
-                        <div style={{ fontSize: '12px', color: 'var(--gray-dark)' }}>
-                          {MEDICAL_SPECIALTIES[visit.specialty]?.name} - {MEDICAL_SPECIALTIES[visit.specialty]?.noteTypes[visit.noteType]}
+              {!isEditingPatient ? (
+                <>
+                  <div className="patient-profile-view">
+                    <div className="profile-section">
+                      <h4 className="profile-section-title">Basic Information</h4>
+                      <div className="profile-grid">
+                        <div className="profile-item">
+                          <span className="profile-label">Name:</span>
+                          <span className="profile-value">{selectedPatient.firstName} {selectedPatient.lastName}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Date of Birth:</span>
+                          <span className="profile-value">{selectedPatient.dateOfBirth} ({calculateAge(selectedPatient.dateOfBirth)} years old)</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Gender:</span>
+                          <span className="profile-value">{selectedPatient.gender || 'Not specified'}</span>
                         </div>
                       </div>
-                      <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px' }}>
-                        {visit.notes}
+                    </div>
+
+                    <div className="profile-section">
+                      <h4 className="profile-section-title">Contact Information</h4>
+                      <div className="profile-grid">
+                        <div className="profile-item">
+                          <span className="profile-label">Phone:</span>
+                          <span className="profile-value">{selectedPatient.phone || 'Not provided'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Email:</span>
+                          <span className="profile-value">{selectedPatient.email || 'Not provided'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Address:</span>
+                          <span className="profile-value">
+                            {selectedPatient.address ? 
+                              `${selectedPatient.address}, ${selectedPatient.city || ''} ${selectedPatient.state || ''} ${selectedPatient.zipCode || ''}`.trim() : 
+                              'Not provided'}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="profile-section">
+                      <h4 className="profile-section-title">Emergency & Insurance</h4>
+                      <div className="profile-grid">
+                        <div className="profile-item">
+                          <span className="profile-label">Emergency Contact:</span>
+                          <span className="profile-value">{selectedPatient.emergencyContact || 'Not provided'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Emergency Phone:</span>
+                          <span className="profile-value">{selectedPatient.emergencyPhone || 'Not provided'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Insurance:</span>
+                          <span className="profile-value">{selectedPatient.insurance || 'Not provided'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Policy Number:</span>
+                          <span className="profile-value">{selectedPatient.policyNumber || 'Not provided'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="profile-section">
+                      <h4 className="profile-section-title">Medical Information</h4>
+                      <div className="profile-grid">
+                        <div className="profile-item">
+                          <span className="profile-label">Primary Physician:</span>
+                          <span className="profile-value">{selectedPatient.primaryPhysician || 'Not assigned'}</span>
+                        </div>
+                        <div className="profile-item">
+                          <span className="profile-label">Preferred Pharmacy:</span>
+                          <span className="profile-value">{selectedPatient.preferredPharmacy || 'Not specified'}</span>
+                        </div>
+                        <div className="profile-item full-width">
+                          <span className="profile-label">Allergies:</span>
+                          <span className="profile-value">{selectedPatient.allergies || 'NKDA'}</span>
+                        </div>
+                        <div className="profile-item full-width">
+                          <span className="profile-label">Medical History:</span>
+                          <span className="profile-value">{selectedPatient.medicalHistory || 'No significant medical history'}</span>
+                        </div>
+                        <div className="profile-item full-width">
+                          <span className="profile-label">Current Medications:</span>
+                          <span className="profile-value">{selectedPatient.medications || 'No current medications'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="profile-section">
+                      <h4 className="profile-section-title">Visit History</h4>
+                      <div className="visit-timeline">
+                        {selectedPatient.visits?.length > 0 ? (
+                          selectedPatient.visits.slice(-5).reverse().map(visit => (
+                            <div key={visit.id} className="visit-timeline-item">
+                              <div className="visit-timeline-header">
+                                <span className="visit-date">{visit.date} at {visit.time}</span>
+                                <button 
+                                  className="btn-text"
+                                  onClick={() => {
+                                    setSelectedNoteForView(visit);
+                                    setShowNoteQuickView(true);
+                                  }}
+                                >
+                                  View Note
+                                </button>
+                              </div>
+                              <div className="visit-timeline-content">
+                                <div className="visit-meta">
+                                  {MEDICAL_SPECIALTIES[visit.specialty]?.name} - {MEDICAL_SPECIALTIES[visit.specialty]?.noteTypes[visit.noteType]}
+                                </div>
+                                <div className="visit-preview">
+                                  {visit.notes.substring(0, 150)}...
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="empty-state">No visits recorded yet</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="modal-actions">
+                    <button 
+                      className="btn btn-glass"
+                      onClick={() => setIsEditingPatient(true)}
+                    >
+                      Edit Patient
+                    </button>
+                    <button 
+                      className="btn btn-glass-primary"
+                      onClick={() => setShowPatientFullView(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
               ) : (
-                <div className="empty-state">No visits recorded yet</div>
+                <>
+                  {/* Edit mode - reuse the add patient form */}
+                  <div className="patient-form-grid">
+                    {/* Same form fields as Add Patient but with edit functionality */}
+                    <div className="form-section">
+                      <h4 className="form-section-title">Basic Information</h4>
+                      
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">First Name *</label>
+                          <input
+                            type="text" 
+                            className="form-input glass-input"
+                            value={newPatientData.firstName}
+                            onChange={(e) => setNewPatientData({...newPatientData, firstName: e.target.value})}
+                            placeholder="Enter first name"
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Last Name *</label>
+                          <input
+                            type="text" 
+                            className="form-input glass-input"
+                            value={newPatientData.lastName}
+                            onChange={(e) => setNewPatientData({...newPatientData, lastName: e.target.value})}
+                            placeholder="Enter last name"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">Date of Birth *</label>
+                          <input
+                            type="date" 
+                            className="form-input glass-input"
+                            value={newPatientData.dateOfBirth}
+                            onChange={(e) => setNewPatientData({...newPatientData, dateOfBirth: e.target.value})}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Gender</label>
+                          <select 
+                            className="form-input glass-input"
+                            value={newPatientData.gender}
+                            onChange={(e) => setNewPatientData({...newPatientData, gender: e.target.value})}
+                          >
+                            <option value="">Select...</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Repeat other sections with same structure as add patient form */}
+                    {/* ... Contact, Emergency, Medical sections ... */}
+                  </div>
+
+                  <div className="modal-actions">
+                    <button 
+                      className="btn btn-glass"
+                      onClick={() => setIsEditingPatient(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      className="btn btn-glass-success"
+                      onClick={() => {
+                        updatePatient();
+                        setIsEditingPatient(false);
+                      }}
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Note Quick View Modal */}
+        {showNoteQuickView && selectedNoteForView && (
+          <div className="modal-backdrop" onClick={() => setShowNoteQuickView(false)}>
+            <div className="modal-content glass-modal" style={{ maxWidth: '800px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">Visit Note</h3>
+                  <p className="modal-subtitle">
+                    {selectedNoteForView.date} at {selectedNoteForView.time}
+                  </p>
+                </div>
+                <button className="modal-close" onClick={() => setShowNoteQuickView(false)}>×</button>
+              </div>
+
+              <div className="note-view">
+                <div className="note-metadata">
+                  <div className="metadata-item">
+                    <span className="metadata-label">Type:</span>
+                    <span className="metadata-value">
+                      {MEDICAL_SPECIALTIES[selectedNoteForView.specialty]?.name} - {MEDICAL_SPECIALTIES[selectedNoteForView.specialty]?.noteTypes[selectedNoteForView.noteType]}
+                    </span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">Created By:</span>
+                    <span className="metadata-value">{selectedNoteForView.createdBy}</span>
+                  </div>
+                </div>
+
+                <div className="note-content">
+                  <h4>Clinical Notes</h4>
+                  <div className="note-text">
+                    {selectedNoteForView.notes}
+                  </div>
+                </div>
+
+                {selectedNoteForView.transcript && (
+                  <div className="note-transcript">
+                    <h4>Original Transcript</h4>
+                    <div className="transcript-text">
+                      {selectedNoteForView.transcript}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="modal-actions">
-                <button className="btn btn-glass" onClick={() => setShowVisitModal(false)}>
+                <button className="btn btn-glass" onClick={() => setShowNoteQuickView(false)}>
                   Close
                 </button>
               </div>
