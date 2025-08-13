@@ -1,0 +1,140 @@
+/* src/styles/login.css */
+/* Login and welcome screen styles */
+
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--gradient-primary);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated background effect */
+.login-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.login-background::before {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: radial-gradient(circle, rgba(186, 230, 55, 0.1) 0%, transparent 70%);
+  animation: rotate 30s linear infinite;
+}
+
+/* Login Card */
+.login-card {
+  position: relative;
+  z-index: 1;
+  padding: 48px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 20px 60px 0 rgba(31, 38, 135, 0.3);
+  border-radius: 24px;
+}
+
+/* Login Logo - FIXED SIZE */
+.login-logo {
+  margin: 0 auto 32px;
+  width: 120px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-logo-img {
+  width: 100%;
+  height: auto;
+  max-width: 120px;
+  object-fit: contain;
+  filter: none;
+}
+
+/* Login Typography */
+.login-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--primary-navy);
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--gray-dark);
+  margin: 0 0 32px 0;
+  font-weight: 400;
+}
+
+/* Login Help */
+.login-help {
+  margin-top: 24px;
+  padding: 16px;
+  background: rgba(186, 230, 55, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 55, 0.2);
+  font-size: 13px;
+  color: var(--gray-dark);
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* Loading Screen */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 20px;
+  background: var(--gradient-primary);
+}
+
+.loading-logo {
+  width: clamp(80px, 15vw, 120px);
+  height: clamp(80px, 15vw, 120px);
+  margin-bottom: 24px;
+  animation: float 3s ease-in-out infinite;
+}
+
+.loading-logo-img {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.2));
+}
+
+.loading-text {
+  color: white;
+  font-size: clamp(18px, 4vw, 20px);
+  font-weight: 300;
+  margin-bottom: 20px;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--primary-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
