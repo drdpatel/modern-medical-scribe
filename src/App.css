@@ -519,22 +519,21 @@ input, textarea, [contenteditable], .selectable-text {
 
 /* ============================================
    SCRIBE LAYOUT
-   Intelligent layout for different screens
+   Fixed layout - no scrolling needed
    ============================================ */
 
 .scribe-layout {
   display: grid;
-  grid-template-columns: minmax(350px, 400px) 1fr;
+  grid-template-columns: 400px 1fr;
   gap: 24px;
-  height: calc(100vh - 180px);
+  height: calc(100vh - 140px);
 }
 
 .scribe-left-panel {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .scribe-right-panel {
@@ -544,9 +543,18 @@ input, textarea, [contenteditable], .selectable-text {
   overflow-y: auto;
 }
 
+/* Compact cards for scribe page */
+.encounter-card {
+  padding: 20px;
+}
+
+.recording-card {
+  padding: 20px;
+}
+
 .config-section {
-  margin-bottom: 24px;
-  padding-bottom: 24px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
@@ -560,105 +568,86 @@ input, textarea, [contenteditable], .selectable-text {
   display: block;
   font-weight: 600;
   color: var(--primary-navy);
-  margin-bottom: 12px;
-  font-size: 14px;
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 
 /* ============================================
    RECORDING CONTROLS
-   Apple Music inspired, works on all devices
+   Simple oval button with text
    ============================================ */
 
 .recording-timer {
   text-align: center;
-  font-size: clamp(16px, 3vw, 18px);
+  font-size: 16px;
   font-weight: 600;
   color: var(--error);
-  padding: 12px;
+  padding: 10px;
   background: rgba(239, 68, 68, 0.1);
   border-radius: var(--radius-medium);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   animation: pulse 2s infinite;
 }
 
-.recording-controls-modern {
+.recording-controls-simple {
   display: flex;
-  gap: 20px;
-  margin: 20px 0;
-  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
   align-items: center;
+}
+
+.btn-record-oval {
+  padding: 14px 32px;
+  border-radius: 50px;
+  background: var(--primary-green);
+  border: 2px solid rgba(186, 230, 55, 0.3);
+  color: var(--primary-navy);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(186, 230, 55, 0.3);
+  min-width: 180px;
+  text-align: center;
+}
+
+.btn-record-oval:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 20px rgba(186, 230, 55, 0.4);
+}
+
+.btn-record-oval:active {
+  transform: scale(0.98);
+}
+
+.btn-record-oval.recording {
+  background: var(--error);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+  animation: pulse 2s infinite;
+}
+
+.btn-record-oval.paused {
+  background: var(--warning);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: white;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+/* Remove old circular button styles */
+.recording-controls-modern {
+  display: none;
 }
 
 .btn-record-toggle {
-  width: clamp(70px, 12vw, 80px);
-  height: clamp(70px, 12vw, 80px);
-  border-radius: 50%;
-  background: var(--primary-green);
-  border: 3px solid rgba(186, 230, 55, 0.3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(186, 230, 55, 0.3);
-}
-
-.btn-record-toggle:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 30px rgba(186, 230, 55, 0.4);
-}
-
-.btn-record-toggle:active {
-  transform: scale(0.98);
-}
-
-.btn-record-toggle.recording {
-  background: var(--error);
-  border-color: rgba(239, 68, 68, 0.3);
-  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
-  animation: pulse 2s infinite;
-}
-
-.btn-record-toggle.paused {
-  background: var(--warning);
-  border-color: rgba(245, 158, 11, 0.3);
-  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
-}
-
-.record-icon {
-  font-size: clamp(28px, 5vw, 32px);
-  color: white;
-  font-weight: bold;
+  display: none;
 }
 
 .btn-stop {
-  width: clamp(50px, 10vw, 60px);
-  height: clamp(50px, 10vw, 60px);
-  border-radius: 50%;
-  background: var(--glass-bg);
-  backdrop-filter: var(--blur);
-  border: 2px solid var(--glass-border);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  font-size: clamp(20px, 4vw, 24px);
-  color: var(--primary-navy);
-}
-
-.btn-stop:hover:not(:disabled) {
-  transform: scale(1.05);
-  background: var(--glass-bg-heavy);
-}
-
-.btn-stop:active {
-  transform: scale(0.98);
-}
-
-.btn-stop:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+  display: none;
 }
 
 @keyframes pulse {
@@ -668,7 +657,7 @@ input, textarea, [contenteditable], .selectable-text {
 
 /* ============================================
    PATIENT MANAGEMENT
-   Responsive patient cards and lists
+   Simplified patient cards without avatars
    ============================================ */
 
 .patient-search-container {
@@ -695,48 +684,12 @@ input, textarea, [contenteditable], .selectable-text {
   box-shadow: 0 0 0 3px rgba(186, 230, 55, 0.1);
 }
 
-.search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 4px;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: var(--z-dropdown);
-  border-radius: var(--radius-medium);
-}
-
-.glass-dropdown {
-  background: var(--glass-bg-heavy);
-  backdrop-filter: var(--blur-heavy);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}
-
-.search-dropdown-item {
-  padding: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  min-height: var(--touch-target-min);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.search-dropdown-item:hover {
-  background: rgba(186, 230, 55, 0.1);
-}
-
-.search-dropdown-item:active {
-  background: rgba(186, 230, 55, 0.2);
-}
-
-.patient-card {
+/* Simplified patient card without avatar */
+.patient-card-simple {
   display: flex;
   align-items: center;
-  padding: 20px;
+  justify-content: space-between;
+  padding: 16px 20px;
   background: var(--glass-bg);
   backdrop-filter: var(--blur);
   border-radius: var(--radius-medium);
@@ -744,47 +697,62 @@ input, textarea, [contenteditable], .selectable-text {
   cursor: pointer;
   transition: all 0.3s ease;
   margin-bottom: 12px;
-  min-height: var(--touch-target-optimal);
 }
 
-.patient-card:hover {
+.patient-card-simple:hover {
   transform: translateX(4px);
   box-shadow: var(--glass-shadow);
   border-color: var(--primary-green);
+  background: var(--glass-bg-heavy);
 }
 
-.patient-card:active {
+.patient-card-simple:active {
   transform: translateX(2px);
 }
 
-.patient-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: var(--primary-navy);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
+/* Clickable patient name with hover effect */
+.patient-name-clickable {
   font-weight: 600;
-  font-size: 18px;
-  margin-right: 16px;
-  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--primary-navy);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  text-decoration: none;
 }
 
+.patient-name-clickable:hover {
+  color: var(--primary-green);
+  text-decoration: underline;
+}
+
+/* Selected patient in scribe view */
+.selected-patient-card {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(186, 230, 55, 0.1);
+  border-radius: var(--radius-medium);
+  border: 1px solid rgba(186, 230, 55, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.patient-info-compact {
+  flex: 1;
+}
+
+.patient-info-compact .patient-name-clickable {
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+/* Remove avatar-related styles */
+.patient-avatar,
 .patient-avatar-small {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--primary-navy);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 14px;
+  display: none;
 }
 
+/* Patient info styles */
 .patient-info {
   flex: 1;
   min-width: 0;
@@ -795,9 +763,6 @@ input, textarea, [contenteditable], .selectable-text {
   font-size: 16px;
   color: var(--primary-navy);
   margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .patient-id,
@@ -805,9 +770,7 @@ input, textarea, [contenteditable], .selectable-text {
 .patient-contact {
   color: var(--gray-dark);
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
 .patient-visits {
@@ -824,10 +787,16 @@ input, textarea, [contenteditable], .selectable-text {
 .patient-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   max-height: 600px;
   overflow-y: auto;
   padding: 4px;
+}
+
+.patient-meta {
+  font-size: 12px;
+  color: var(--gray-dark);
+  margin-top: 2px;
 }
 
 /* ============================================
