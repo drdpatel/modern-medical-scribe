@@ -3,8 +3,14 @@ import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
 import './App.css';
-// Import the logo - make sure to add your actual logo file
-import aayuLogo from './assets/aayu-logo.png';
+// Conditional logo import with fallback
+let aayuLogo;
+try {
+  aayuLogo = require('./assets/aayu-logo.png');
+} catch (e) {
+  // Fallback to placeholder if logo doesn't exist
+  aayuLogo = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDIwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdHlsZT0ic3RvcC1jb2xvcjojYmFlNjM3O3N0b3Atb3BhY2l0eToxIiAvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3R5bGU9InN0b3AtY29sb3I6I2E4ZDQyZTtzdG9wLW9wYWNpdHk6MSIgLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMCwgMjUpIj48cGF0aCBkPSJNIDIwIDUwIEwgMzUgMTAgTCA1MCA1MCBNIDI1IDM1IEwgNDUgMzUiIHN0cm9rZT0iI2JhZTYzNyIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cmVjdCB4PSIzMiIgeT0iMjIiIHdpZHRoPSI2IiBoZWlnaHQ9IjE2IiBmaWxsPSIjMjcyNjZiIiByeD0iMSIvPjxyZWN0IHg9IjI2IiB5PSIyOCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjYiIGZpbGw9IiMyNzI2NmIiIHJ4PSIxIi8+PC9nPjx0ZXh0IHg9IjcwIiB5PSI0NSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzI3MjY2YiI+QWF5dTwvdGV4dD48dGV4dCB4PSIxMzAiIHk9IjQ1IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSIzMDAiIGZpbGw9IiMyNzI2NmIiPldlbGw8L3RleHQ+PHRleHQgeD0iNzAiIHk9IjY1IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTAiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjOWIyZmNkIiBvcGFjaXR5PSIwLjgiPkFJIE1FRElDQUwgU0NSSUJFPC90ZXh0Pjwvc3ZnPg==';
+}
 
 // Move static data outside component to prevent recreation
 const MEDICAL_SPECIALTIES = {
@@ -97,11 +103,11 @@ const SPECIALTY_INSTRUCTIONS = {
   pediatrics: 'Consider age-appropriate development, growth parameters, immunization status, family dynamics, and pediatric-specific concerns.'
 };
 
-// Error Boundary Component
+// Error Boundary Component with proper reset
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -110,6 +116,18 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('App Error:', error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  handleReset = () => {
+    // Clear all localStorage to reset app state
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {
+      console.error('Failed to clear storage:', e);
+    }
+    window.location.reload();
   }
 
   render() {
@@ -121,16 +139,35 @@ class ErrorBoundary extends React.Component {
           alignItems: 'center', 
           height: '100vh',
           flexDirection: 'column',
-          gap: '20px'
+          gap: '20px',
+          padding: '20px',
+          textAlign: 'center'
         }}>
-          <h1 style={{ color: 'var(--aayu-coral)' }}>Something went wrong</h1>
+          <h1 style={{ color: 'var(--error, #ef4444)' }}>Something went wrong</h1>
           <p>The application encountered an error. Please refresh the page.</p>
-          <button 
-            className="btn btn-primary"
-            onClick={() => window.location.reload()}
-          >
-            Refresh Page
-          </button>
+          {this.state.error && (
+            <details style={{ marginTop: '10px', textAlign: 'left', maxWidth: '600px' }}>
+              <summary>Error Details</summary>
+              <pre style={{ fontSize: '12px', overflow: 'auto' }}>
+                {this.state.error.toString()}
+                {this.state.errorInfo && this.state.errorInfo.componentStack}
+              </pre>
+            </details>
+          )}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              className="btn btn-glass-primary"
+              onClick={() => window.location.reload()}
+            >
+              Refresh Page
+            </button>
+            <button 
+              className="btn btn-glass"
+              onClick={this.handleReset}
+            >
+              Reset App
+            </button>
+          </div>
         </div>
       );
     }
@@ -174,6 +211,8 @@ function App() {
   const [medicalNotes, setMedicalNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('Please log in to continue');
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
 
   // API settings states
   const [apiSettings, setApiSettings] = useState({
@@ -198,14 +237,17 @@ function App() {
   // Speech recognition refs
   const recognizerRef = useRef(null);
   const audioConfigRef = useRef(null);
-  const timeoutRef = useRef(null);
+  const silenceTimeoutRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const activityCheckRef = useRef(null);
 
   // Memoized filtered patients for performance
   const filteredPatients = useMemo(() => {
-    if (!searchTerm.trim()) return patients;
+    if (!searchTerm?.trim()) return patients;
     
     const term = searchTerm.toLowerCase();
     return patients.filter(patient => {
+      if (!patient) return false;
       const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
       const dob = patient.dateOfBirth || '';
       return fullName.includes(term) || dob.includes(term);
@@ -214,15 +256,62 @@ function App() {
 
   // Filtered patients for scribe dropdown search
   const filteredPatientsForScribe = useMemo(() => {
-    if (!patientSearchTerm.trim()) return patients;
+    if (!patientSearchTerm?.trim()) return patients;
     
     const term = patientSearchTerm.toLowerCase();
     return patients.filter(patient => {
+      if (!patient) return false;
       const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
       const dob = patient.dateOfBirth || '';
       return fullName.includes(term) || dob.includes(term);
     });
   }, [patients, patientSearchTerm]);
+
+  // Recording duration timer
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+    
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+  }, [isRecording, isPaused]);
+
+  // Activity monitoring for session timeout
+  useEffect(() => {
+    const handleActivity = () => {
+      if (currentUser && authService) {
+        authService.updateActivity();
+      }
+    };
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, handleActivity));
+
+    // Check session validity every minute
+    activityCheckRef.current = setInterval(() => {
+      if (currentUser && authService && !authService.isSessionValid()) {
+        handleLogout();
+      }
+    }, 60000);
+
+    return () => {
+      events.forEach(event => window.removeEventListener(event, handleActivity));
+      if (activityCheckRef.current) {
+        clearInterval(activityCheckRef.current);
+      }
+    };
+  }, [currentUser]);
 
   // Text cleaning function to remove markdown formatting
   const cleanMarkdownFormatting = useCallback((text) => {
@@ -248,17 +337,22 @@ function App() {
     }
   }, []);
 
-  // Load training data from localStorage
+  // Load training data from localStorage with validation
   const loadTrainingData = useCallback(() => {
     try {
       const saved = localStorage.getItem('medicalScribeTraining');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
+          // Validate specialty and noteType
+          const validSpecialty = MEDICAL_SPECIALTIES[parsed.specialty] ? parsed.specialty : 'internal_medicine';
+          const validNoteType = MEDICAL_SPECIALTIES[validSpecialty].noteTypes[parsed.noteType] ? 
+            parsed.noteType : 'progress_note';
+          
           setTrainingData({
-            specialty: parsed.specialty || 'internal_medicine',
-            noteType: parsed.noteType || 'progress_note',
-            baselineNotes: Array.isArray(parsed.baselineNotes) ? parsed.baselineNotes : [],
+            specialty: validSpecialty,
+            noteType: validNoteType,
+            baselineNotes: Array.isArray(parsed.baselineNotes) ? parsed.baselineNotes.slice(-5) : [],
             customTemplates: parsed.customTemplates || {}
           });
         }
@@ -274,14 +368,23 @@ function App() {
     }
   }, []);
 
-  // Save training data to localStorage
+  // Save training data to localStorage with error handling
   const saveTrainingData = useCallback((data) => {
     try {
       if (!data || typeof data !== 'object') {
         throw new Error('Invalid training data');
       }
-      localStorage.setItem('medicalScribeTraining', JSON.stringify(data));
-      setTrainingData(data);
+      
+      // Validate and sanitize data
+      const sanitizedData = {
+        specialty: MEDICAL_SPECIALTIES[data.specialty] ? data.specialty : 'internal_medicine',
+        noteType: data.noteType || 'progress_note',
+        baselineNotes: Array.isArray(data.baselineNotes) ? data.baselineNotes.slice(-5) : [],
+        customTemplates: data.customTemplates || {}
+      };
+      
+      localStorage.setItem('medicalScribeTraining', JSON.stringify(sanitizedData));
+      setTrainingData(sanitizedData);
     } catch (error) {
       console.error('Failed to save training data:', error);
       setStatus('Warning: Failed to save training data');
@@ -312,7 +415,7 @@ function App() {
 
       const updatedData = {
         ...trainingData,
-        baselineNotes: [...trainingData.baselineNotes, newNote].slice(-5)
+        baselineNotes: [...(trainingData.baselineNotes || []), newNote].slice(-5)
       };
 
       saveTrainingData(updatedData);
@@ -329,7 +432,7 @@ function App() {
     try {
       const updatedData = {
         ...trainingData,
-        baselineNotes: trainingData.baselineNotes.filter(note => note.id !== noteId)
+        baselineNotes: (trainingData.baselineNotes || []).filter(note => note.id !== noteId)
       };
       saveTrainingData(updatedData);
     } catch (error) {
@@ -396,25 +499,43 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, [trainingData]);
 
-  // Load patients from localStorage
+  // Load patients from localStorage with error handling
   const loadPatientsFromLocalStorage = useCallback(() => {
     try {
       const savedPatients = localStorage.getItem('medicalScribePatients');
       if (savedPatients) {
         const patientsData = JSON.parse(savedPatients);
-        const patientsWithVisits = patientsData.map(patient => {
-          const visitsKey = `visits_${patient.id}`;
-          const savedVisits = localStorage.getItem(visitsKey);
-          const visits = savedVisits ? JSON.parse(savedVisits) : [];
-          return { ...patient, visits };
-        });
-        setPatients(patientsWithVisits);
+        if (Array.isArray(patientsData)) {
+          const patientsWithVisits = patientsData.map(patient => {
+            try {
+              const visitsKey = `visits_${patient.id}`;
+              const savedVisits = localStorage.getItem(visitsKey);
+              const visits = savedVisits ? JSON.parse(savedVisits) : [];
+              return { ...patient, visits: Array.isArray(visits) ? visits : [] };
+            } catch (e) {
+              console.error('Error loading visits for patient:', patient.id, e);
+              return { ...patient, visits: [] };
+            }
+          });
+          setPatients(patientsWithVisits);
+        } else {
+          setPatients([]);
+        }
       } else {
         setPatients([]);
       }
     } catch (error) {
       console.error('Failed to load patients:', error);
       setPatients([]);
+      // Try to backup corrupted data
+      try {
+        const backup = localStorage.getItem('medicalScribePatients');
+        if (backup) {
+          localStorage.setItem('medicalScribePatients_backup_' + Date.now(), backup);
+        }
+      } catch (backupError) {
+        console.error('Failed to backup corrupted data:', backupError);
+      }
     }
   }, []);
 
@@ -423,25 +544,57 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     loadPatientsFromLocalStorage();
   }, [loadPatientsFromLocalStorage]);
 
-  // Cleanup function for speech recognizer
+  // Comprehensive cleanup function for speech recognizer
   const cleanupSpeechRecognizer = useCallback(() => {
     try {
-      if (recognizerRef.current) {
-        recognizerRef.current.stopContinuousRecognitionAsync(
-          () => {
-            console.log('Speech recognizer stopped');
-            recognizerRef.current = null;
-          },
-          (error) => {
-            console.error('Error stopping recognizer:', error);
-            recognizerRef.current = null;
-          }
-        );
+      // Clear all timers
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
       }
       
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      
+      // Stop and dispose recognizer
+      if (recognizerRef.current) {
+        try {
+          recognizerRef.current.stopContinuousRecognitionAsync(
+            () => {
+              console.log('Speech recognizer stopped');
+              if (recognizerRef.current) {
+                recognizerRef.current.dispose();
+                recognizerRef.current = null;
+              }
+            },
+            (error) => {
+              console.error('Error stopping recognizer:', error);
+              if (recognizerRef.current) {
+                try {
+                  recognizerRef.current.dispose();
+                } catch (disposeError) {
+                  console.error('Error disposing recognizer:', disposeError);
+                }
+                recognizerRef.current = null;
+              }
+            }
+          );
+        } catch (stopError) {
+          console.error('Error in stop process:', stopError);
+          recognizerRef.current = null;
+        }
+      }
+      
+      // Clean up audio config
+      if (audioConfigRef.current) {
+        try {
+          audioConfigRef.current.close();
+        } catch (closeError) {
+          console.error('Error closing audio config:', closeError);
+        }
+        audioConfigRef.current = null;
       }
     } catch (error) {
       console.error('Error during cleanup:', error);
@@ -461,18 +614,27 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         if (user) {
           setCurrentUser(user);
           setStatus('Ready to begin');
-          await loadPatientsFromLocalStorage();
+          loadPatientsFromLocalStorage();
           loadTrainingData();
         } else {
           setShowLoginModal(true);
         }
         
+        // Load API settings with validation
         try {
           const savedApiSettings = localStorage.getItem('medicalScribeApiSettings');
           if (savedApiSettings) {
             const parsed = JSON.parse(savedApiSettings);
             if (parsed && typeof parsed === 'object') {
-              setApiSettings(prev => ({ ...prev, ...parsed }));
+              setApiSettings(prev => ({ 
+                ...prev, 
+                speechKey: parsed.speechKey || '',
+                speechRegion: parsed.speechRegion || 'eastus',
+                openaiEndpoint: parsed.openaiEndpoint || '',
+                openaiKey: parsed.openaiKey || '',
+                openaiDeployment: parsed.openaiDeployment || 'gpt-4',
+                openaiApiVersion: parsed.openaiApiVersion || '2024-08-01-preview'
+              }));
             }
           }
         } catch (apiError) {
@@ -489,10 +651,17 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
 
     initializeApp();
     
+    // Cleanup on unmount
     return () => {
       cleanupSpeechRecognizer();
+      if (activityCheckRef.current) {
+        clearInterval(activityCheckRef.current);
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
     };
-  }, [loadPatientsFromLocalStorage, loadTrainingData, cleanupSpeechRecognizer]);
+  }, []);
 
   // Authentication handlers
   const handleLogin = useCallback((e) => {
@@ -531,13 +700,19 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         authService.logout();
       }
       
+      // Reset all states
       setCurrentUser(null);
       setPatients([]);
       setSelectedPatient(null);
       setTranscript('');
+      setInterimTranscript('');
       setMedicalNotes('');
+      setIsRecording(false);
+      setIsPaused(false);
+      setRecordingDuration(0);
       setStatus('Please log in to continue');
       setShowLoginModal(true);
+      setActiveTab('scribe');
     } catch (error) {
       console.error('Logout error:', error);
       setCurrentUser(null);
@@ -559,6 +734,11 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         return;
       }
 
+      if (newUser.password.length < 8) {
+        alert('Password must be at least 8 characters long');
+        return;
+      }
+
       if (!authService || typeof authService.createUser !== 'function') {
         alert('User creation service not available');
         return;
@@ -574,17 +754,27 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, [newUser]);
 
-  // API settings handler
+  // API settings handler with validation
   const saveApiSettings = useCallback((settings) => {
     try {
       if (!settings || typeof settings !== 'object') {
         throw new Error('Invalid settings object');
       }
       
-      setApiSettings(settings);
-      localStorage.setItem('medicalScribeApiSettings', JSON.stringify(settings));
+      // Validate settings
+      const validatedSettings = {
+        speechKey: settings.speechKey || '',
+        speechRegion: settings.speechRegion || 'eastus',
+        openaiEndpoint: settings.openaiEndpoint || '',
+        openaiKey: settings.openaiKey || '',
+        openaiDeployment: settings.openaiDeployment || 'gpt-4',
+        openaiApiVersion: settings.openaiApiVersion || '2024-08-01-preview'
+      };
       
-      if (settings.speechKey && settings.openaiKey) {
+      setApiSettings(validatedSettings);
+      localStorage.setItem('medicalScribeApiSettings', JSON.stringify(validatedSettings));
+      
+      if (validatedSettings.speechKey && validatedSettings.openaiKey) {
         setStatus('API settings saved - Ready to begin');
       } else {
         setStatus('API settings saved - Please configure all required keys');
@@ -595,7 +785,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
     }
   }, []);
 
-  // Patient management
+  // Patient management with validation
   const addPatient = useCallback(() => {
     try {
       if (!authService?.hasPermission('add_patients')) {
@@ -629,11 +819,11 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       setStatus('Patient added successfully');
     } catch (error) {
       console.error('Error adding patient:', error);
-      alert('Failed to save patient');
+      alert('Failed to save patient: ' + error.message);
     }
   }, [newPatientData, loadPatientsFromLocalStorage]);
 
-  // Recording functions
+  // FIXED: Recording functions with proper silence handling
   const startRecording = useCallback(async () => {
     try {
       if (!authService?.hasPermission('scribe')) {
@@ -656,6 +846,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
 
       setStatus('Requesting microphone access...');
       
+      // Request microphone permission
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop());
@@ -665,19 +856,41 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         return;
       }
       
+      // Clean up any existing recognizer
       cleanupSpeechRecognizer();
       
       const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
       speechConfig.speechRecognitionLanguage = 'en-US';
+      
+      // CRITICAL FIX: Configure for continuous dictation without auto-stop
       speechConfig.enableDictation();
+      
+      // Set properties to prevent auto-stop on silence
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
+        "3600000" // 1 hour - effectively disables silence timeout
+      );
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
+        "3600000" // 1 hour - prevents stopping if user doesn't speak immediately
+      );
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.Speech_SegmentationSilenceTimeoutMs,
+        "3000" // 3 seconds between segments
+      );
       
       audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
       recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
 
+      // Set up event handlers
       recognizerRef.current.recognizing = (s, e) => {
         try {
           if (e.result?.text) {
             setInterimTranscript(e.result.text);
+            // Reset silence timer on new speech
+            if (silenceTimeoutRef.current) {
+              clearTimeout(silenceTimeoutRef.current);
+            }
           }
         } catch (error) {
           console.error('Error in recognizing event:', error);
@@ -692,20 +905,27 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
               return newText;
             });
             setInterimTranscript('');
+            
+            // Reset silence timer on recognized speech
+            if (silenceTimeoutRef.current) {
+              clearTimeout(silenceTimeoutRef.current);
+            }
           }
         } catch (error) {
           console.error('Error in recognized event:', error);
         }
       };
 
-      recognizerRef.current.sessionStopped = () => {
-        try {
-          setIsRecording(false);
-          setIsPaused(false);
-          setStatus('Recording session ended');
-        } catch (error) {
-          console.error('Error in session stopped event:', error);
-        }
+      recognizerRef.current.sessionStarted = (s, e) => {
+        console.log('Recording session started');
+        setStatus('Recording... Speak now');
+      };
+
+      recognizerRef.current.sessionStopped = (s, e) => {
+        console.log('Recording session stopped');
+        setIsRecording(false);
+        setIsPaused(false);
+        setStatus('Recording session ended');
       };
 
       recognizerRef.current.canceled = (s, e) => {
@@ -719,44 +939,58 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
               setStatus('Connection failed. Check your internet connection.');
             } else if (e.errorCode === SpeechSDK.CancellationErrorCode.AuthenticationFailure) {
               setStatus('Authentication failed. Check your Speech Service key.');
+            } else if (e.errorCode === SpeechSDK.CancellationErrorCode.BadRequest) {
+              setStatus('Invalid request. Check your region and deployment.');
+            } else if (e.errorCode === SpeechSDK.CancellationErrorCode.Forbidden) {
+              setStatus('Access forbidden. Check your API key permissions.');
             } else {
               setStatus(`Recognition error: ${e.errorDetails}`);
             }
           }
+          cleanupSpeechRecognizer();
         } catch (error) {
           console.error('Error in canceled event:', error);
         }
       };
 
-      recognizerRef.current.startContinuousRecognitionAsync(
-        () => {
-          setIsRecording(true);
-          setIsPaused(false);
-          setStatus('Recording... Speak now');
-        },
-        (error) => {
-          console.error('Start recording error:', error);
-          setIsRecording(false);
-          setIsPaused(false);
-          
-          const errorStr = error.toString();
-          if (errorStr.includes('1006')) {
-            setStatus('Invalid Speech key. Check your Azure Speech Service key.');
-          } else if (errorStr.includes('1007')) {
-            setStatus('Speech service quota exceeded or region mismatch.');
-          } else if (errorStr.includes('1008')) {
-            setStatus('Request timeout. Check your internet connection.');
-          } else {
-            setStatus(`Recording failed: ${error}`);
+      // Start continuous recognition
+      await new Promise((resolve, reject) => {
+        recognizerRef.current.startContinuousRecognitionAsync(
+          () => {
+            console.log('Continuous recognition started');
+            setIsRecording(true);
+            setIsPaused(false);
+            setRecordingStartTime(Date.now());
+            setRecordingDuration(0);
+            setStatus('Recording... Speak now');
+            resolve();
+          },
+          (error) => {
+            console.error('Start recording error:', error);
+            setIsRecording(false);
+            setIsPaused(false);
+            
+            const errorStr = error.toString();
+            if (errorStr.includes('1006')) {
+              setStatus('Invalid Speech key. Check your Azure Speech Service key.');
+            } else if (errorStr.includes('1007')) {
+              setStatus('Speech service quota exceeded or region mismatch.');
+            } else if (errorStr.includes('1008')) {
+              setStatus('Request timeout. Check your internet connection.');
+            } else {
+              setStatus(`Recording failed: ${error}`);
+            }
+            reject(error);
           }
-        }
-      );
+        );
+      });
       
     } catch (error) {
       console.error('Start recording setup error:', error);
       setStatus(`Setup failed: ${error.message}`);
       setIsRecording(false);
       setIsPaused(false);
+      cleanupSpeechRecognizer();
     }
   }, [apiSettings, isRecording, isPaused, cleanupSpeechRecognizer]);
 
@@ -768,6 +1002,7 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
             setIsPaused(true);
             setInterimTranscript('');
             setStatus('Recording paused');
+            console.log('Recording paused successfully');
           },
           (error) => {
             console.error('Pause failed:', error);
@@ -792,9 +1027,25 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         return;
       }
       
+      // Clean up existing recognizer
+      if (recognizerRef.current) {
+        recognizerRef.current.dispose();
+        recognizerRef.current = null;
+      }
+      
       const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
       speechConfig.speechRecognitionLanguage = 'en-US';
       speechConfig.enableDictation();
+      
+      // Set extended timeouts
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
+        "3600000"
+      );
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
+        "3600000"
+      );
       
       audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
       recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
@@ -823,17 +1074,22 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
         }
       };
 
-      recognizerRef.current.startContinuousRecognitionAsync(
-        () => {
-          setIsPaused(false);
-          setIsRecording(true);
-          setStatus('Recording resumed... Speak now');
-        },
-        (error) => {
-          console.error('Resume failed:', error);
-          setStatus('Resume failed: ' + error);
-        }
-      );
+      await new Promise((resolve, reject) => {
+        recognizerRef.current.startContinuousRecognitionAsync(
+          () => {
+            setIsPaused(false);
+            setIsRecording(true);
+            setStatus('Recording resumed... Speak now');
+            console.log('Recording resumed successfully');
+            resolve();
+          },
+          (error) => {
+            console.error('Resume failed:', error);
+            setStatus('Resume failed: ' + error);
+            reject(error);
+          }
+        );
+      });
     } catch (error) {
       console.error('Resume recording error:', error);
       setStatus('Error resuming recording');
@@ -845,25 +1101,29 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       if (recognizerRef.current) {
         recognizerRef.current.stopContinuousRecognitionAsync(
           () => {
+            console.log('Recording stopped successfully');
             setIsRecording(false);
             setIsPaused(false);
             setInterimTranscript('');
+            setRecordingDuration(0);
             setStatus('Recording complete');
-            recognizerRef.current = null;
+            cleanupSpeechRecognizer();
           },
           (error) => {
             console.error('Stop recording error:', error);
             setIsRecording(false);
             setIsPaused(false);
             setInterimTranscript('');
+            setRecordingDuration(0);
             setStatus('Recording stopped with error');
-            recognizerRef.current = null;
+            cleanupSpeechRecognizer();
           }
         );
       } else {
         setIsRecording(false);
         setIsPaused(false);
         setInterimTranscript('');
+        setRecordingDuration(0);
         setStatus('Recording complete');
       }
     } catch (error) {
@@ -871,11 +1131,13 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation mat
       setIsRecording(false);
       setIsPaused(false);
       setInterimTranscript('');
+      setRecordingDuration(0);
       setStatus('Error stopping recording');
+      cleanupSpeechRecognizer();
     }
-  }, []);
+  }, [cleanupSpeechRecognizer]);
 
-  // AI note generation
+  // AI note generation with better error handling
   const generateNotes = useCallback(async () => {
     try {
       if (!authService?.hasPermission('scribe')) {
@@ -919,8 +1181,10 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
 
       const systemPrompt = generateSpecialtyPrompt();
 
-      const endpoint = openaiEndpoint.endsWith('/') ? openaiEndpoint : openaiEndpoint + '/';
-      const apiUrl = `${endpoint}openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`;
+      // Fix endpoint URL
+      const endpoint = openaiEndpoint.trim();
+      const baseUrl = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+      const apiUrl = `${baseUrl}/openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`;
 
       const requestData = {
         messages: [
@@ -938,11 +1202,16 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
           'Content-Type': 'application/json',
           'api-key': openaiKey
         },
-        timeout: 30000
+        timeout: 30000,
+        validateStatus: (status) => status < 500
       });
 
+      if (response.status !== 200) {
+        throw new Error(`API returned status ${response.status}: ${response.data?.error?.message || 'Unknown error'}`);
+      }
+
       if (!response.data?.choices?.[0]?.message?.content) {
-        throw new Error('Invalid response from OpenAI API');
+        throw new Error('Invalid response from OpenAI API - no content received');
       }
 
       const rawNotes = response.data.choices[0].message.content;
@@ -954,27 +1223,31 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     } catch (error) {
       console.error('AI generation error:', error);
       
+      let errorMessage = 'Failed to generate notes: ';
+      
       if (error.code === 'ECONNABORTED') {
-        setStatus('Request timed out. Please try again.');
+        errorMessage = 'Request timed out. Please try again.';
       } else if (error.response?.status === 401) {
-        setStatus('OpenAI authentication failed. Check your API key.');
+        errorMessage = 'OpenAI authentication failed. Check your API key.';
       } else if (error.response?.status === 404) {
-        setStatus('OpenAI deployment not found. Check your deployment name and endpoint.');
+        errorMessage = 'OpenAI deployment not found. Check your deployment name and endpoint.';
       } else if (error.response?.status === 429) {
-        setStatus('OpenAI rate limit exceeded. Wait a moment and try again.');
+        errorMessage = 'OpenAI rate limit exceeded. Wait a moment and try again.';
       } else if (error.response?.status === 400) {
-        setStatus('Invalid request. Check your OpenAI settings and try again.');
-      } else if (error.response?.data?.error?.message) {
-        setStatus('Failed to generate notes: ' + error.response.data.error.message);
+        errorMessage = 'Invalid request. Check your OpenAI settings and try again.';
+      } else if (error.message) {
+        errorMessage += error.message;
       } else {
-        setStatus('Failed to generate notes: ' + (error.message || 'Unknown error'));
+        errorMessage += 'Unknown error occurred';
       }
+      
+      setStatus(errorMessage);
     } finally {
       setIsProcessing(false);
     }
   }, [transcript, selectedPatient, apiSettings, trainingData, generateSpecialtyPrompt, cleanMarkdownFormatting]);
 
-  // Save visit
+  // Save visit with validation
   const saveVisit = useCallback(() => {
     try {
       if (!medicalNotes?.trim()) {
@@ -1000,7 +1273,8 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         notes: medicalNotes,
         specialty: trainingData.specialty,
         noteType: trainingData.noteType,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        createdBy: currentUser?.name || 'Unknown'
       };
 
       const visitsKey = `visits_${selectedPatient.id}`;
@@ -1010,8 +1284,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       
       reloadPatients();
       
-      setStatus('Visit saved successfully');
-      
+      // Clear the session after saving
       setTranscript('');
       setInterimTranscript('');
       setMedicalNotes('');
@@ -1020,13 +1293,14 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + (error.message || 'Unknown error'));
     }
-  }, [medicalNotes, selectedPatient, transcript, reloadPatients, trainingData]);
+  }, [medicalNotes, selectedPatient, transcript, reloadPatients, trainingData, currentUser]);
 
-  // Utility functions
+  // Utility functions with error handling
   const getPatientInitials = useCallback((patient) => {
     try {
-      const firstName = patient?.firstName || '';
-      const lastName = patient?.lastName || '';
+      if (!patient) return '??';
+      const firstName = patient.firstName || '';
+      const lastName = patient.lastName || '';
       
       if (!firstName && !lastName) return '??';
       
@@ -1040,13 +1314,16 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
   const getAvatarColor = useCallback((patient) => {
     try {
       const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
-      const firstName = patient?.firstName || '';
-      const lastName = patient?.lastName || '';
+      
+      if (!patient) return colors[0];
+      
+      const firstName = patient.firstName || '';
+      const lastName = patient.lastName || '';
       
       if (!firstName && !lastName) return colors[0];
       
       const charSum = (firstName.charCodeAt(0) || 0) + (lastName.charCodeAt(0) || 0);
-      const index = charSum % colors.length;
+      const index = Math.abs(charSum) % colors.length;
       return colors[index];
     } catch (error) {
       console.error('Error getting avatar color:', error);
@@ -1054,13 +1331,19 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     }
   }, []);
 
+  // Format recording duration
+  const formatDuration = useCallback((seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
   // Handle patient selection
   const handlePatientSelect = useCallback((patientId) => {
     try {
-      console.log('Selecting patient:', patientId);
-      
       if (!patientId || patientId === '') { 
         setSelectedPatient(null); 
+        setPatientSearchTerm('');
         return; 
       }
       
@@ -1072,7 +1355,6 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
       }
       
       const patient = patients.find(p => p?.id === parsedId);
-      console.log('Found patient:', patient);
       setSelectedPatient(patient || null);
       setPatientSearchTerm('');
     } catch (error) {
@@ -1098,7 +1380,11 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     );
   }
 
-  // Sidebar render function - UPDATED WITH LOGO
+  // Rest of the component remains the same as before...
+  // [Include all the render functions from the previous code]
+  // I'll continue with just the key render functions that have changes
+
+  // Sidebar render function
   const renderSidebar = () => (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -1174,7 +1460,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     </div>
   );
 
-  // Optimized Scribe Layout
+  // Updated Scribe Page with recording duration display
   const renderScribePage = () => (
     <div className="content-container">
       <div className="page-header">
@@ -1227,7 +1513,7 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
                 {selectedPatient ? (
                   <div className="selected-patient-card">
                     <div className="patient-info-row">
-                      <div className="patient-avatar-small">
+                      <div className="patient-avatar-small" style={{ backgroundColor: getAvatarColor(selectedPatient) }}>
                         {getPatientInitials(selectedPatient)}
                       </div>
                       <div className="patient-details">
@@ -1292,6 +1578,12 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
             {/* Recording Controls Card */}
             <div className="card glass-card">
               <h3 className="card-title">Recording Controls</h3>
+              
+              {isRecording && (
+                <div className="recording-timer">
+                  Recording Time: {formatDuration(recordingDuration)}
+                </div>
+              )}
               
               <div className="recording-controls-optimized">
                 <button 
@@ -1392,74 +1684,381 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
     </div>
   );
 
-  // Simplified render based on active tab
-  const renderActivePage = () => {
-    switch (activeTab) {
-      case 'scribe':
-        return renderScribePage();
+  // Rest of the render functions remain the same...
+  // [Include all other page renders from previous code]
 
-      case 'training':
-        // [Keep existing training page code]
-        return (
-          <div className="content-container">
-            <div className="page-header">
-              <h2 className="page-title">AI Training Center</h2>
-            </div>
-            {/* Rest of training page unchanged */}
-          </div>
-        );
+  // Render all pages functions
+  const renderTrainingPage = () => (
+    <div className="content-container">
+      <div className="page-header">
+        <h2 className="page-title">AI Training Center</h2>
+      </div>
+      {!authService?.hasPermission('scribe') ? (
+        <div className="card glass-card">
+          <h3 className="card-title">Access Denied</h3>
+          <p>You do not have permission to access the training functionality.</p>
+        </div>
+      ) : (
+        <>
+          {/* Training Configuration */}
+          <div className="card glass-card">
+            <h3 className="card-title">Current Training Configuration</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div>
+                <label className="form-label">Medical Specialty</label>
+                <select 
+                  className="form-input glass-input"
+                  value={trainingData.specialty}
+                  onChange={(e) => {
+                    const newData = { 
+                      ...trainingData, 
+                      specialty: e.target.value, 
+                      noteType: Object.keys(MEDICAL_SPECIALTIES[e.target.value]?.noteTypes || {})[0] || 'progress_note'
+                    };
+                    saveTrainingData(newData);
+                  }}
+                >
+                  {Object.entries(MEDICAL_SPECIALTIES).map(([key, specialty]) => (
+                    <option key={key} value={key}>{specialty.name}</option>
+                  ))}
+                </select>
+              </div>
 
-      case 'patients':
-        // [Keep existing patients page code]
-        return (
-          <div className="content-container">
-            <div className="page-header">
-              <h2 className="page-title">Patient Management</h2>
-              {authService?.hasPermission('add_patients') && (
-                <button className="btn btn-glass-primary" onClick={() => setShowPatientModal(true)}>
-                  Add New Patient
-                </button>
-              )}
+              <div>
+                <label className="form-label">Note Type</label>
+                <select 
+                  className="form-input glass-input"
+                  value={trainingData.noteType}
+                  onChange={(e) => {
+                    const newData = { ...trainingData, noteType: e.target.value };
+                    saveTrainingData(newData);
+                  }}
+                >
+                  {Object.entries(MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes || {}).map(([key, name]) => (
+                    <option key={key} value={key}>{name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            {/* Rest of patients page unchanged */}
-          </div>
-        );
 
-      case 'settings':
-        // [Keep existing settings page code]
-        return (
-          <div className="content-container">
-            <div className="page-header">
-              <h2 className="page-title">API Settings</h2>
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: 'rgba(186, 230, 55, 0.1)', 
+              borderRadius: '8px',
+              border: '2px solid rgba(186, 230, 55, 0.3)',
+              fontSize: '14px'
+            }}>
+              <strong>Current Settings:</strong> {MEDICAL_SPECIALTIES[trainingData.specialty]?.name} - {MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes[trainingData.noteType]}
+              <br />
+              <strong>Baseline Notes:</strong> {trainingData.baselineNotes?.length || 0} uploaded
             </div>
-            {/* Rest of settings page unchanged */}
           </div>
-        );
 
-      case 'users':
-        // [Keep existing users page code]
-        return (
-          <div className="content-container">
-            <div className="page-header">
-              <h2 className="page-title">User Management</h2>
-            </div>
-            {/* Rest of users page unchanged */}
-          </div>
-        );
+          {/* Add Baseline Note */}
+          <div className="card glass-card">
+            <h3 className="card-title">Add Baseline Note</h3>
+            <p style={{ color: 'var(--gray-dark)', marginBottom: '16px' }}>
+              Upload examples of your preferred note style. The AI will learn from these to match your documentation preferences.
+            </p>
 
-      default:
-        return (
-          <div className="content-container">
-            <div className="page-header">
-              <h2 className="page-title">Page Not Found</h2>
+            <div className="form-group">
+              <label className="form-label">Paste Previous Note (up to 5 notes stored)</label>
+              <textarea
+                className="form-textarea glass-input"
+                style={{ minHeight: '200px' }}
+                value={uploadedNoteText}
+                onChange={(e) => setUploadedNoteText(e.target.value)}
+                placeholder={`Paste a ${MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes[trainingData.noteType] || 'medical note'} here...
+
+Example:
+CHIEF COMPLAINT: Follow-up visit for hypertension
+
+HISTORY OF PRESENT ILLNESS:
+Mr. Smith is a 55-year-old male with a history of hypertension...
+
+etc.`}
+              />
             </div>
-            <div className="card glass-card">
-              <p>The requested page could not be found.</p>
-            </div>
+
+            <button 
+              className="btn btn-glass-success"
+              onClick={addBaselineNote}
+              disabled={!uploadedNoteText?.trim()}
+            >
+              Add to Baseline
+            </button>
           </div>
-        );
-    }
-  };
+
+          {/* Current Baseline Notes */}
+          <div className="card glass-card">
+            <h3 className="card-title">Current Baseline Notes ({trainingData.baselineNotes?.length || 0}/5)</h3>
+            
+            {!trainingData.baselineNotes?.length ? (
+              <div className="empty-state">
+                No baseline notes uploaded yet. Add your first example note above.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {trainingData.baselineNotes.map((note, index) => (
+                  <div key={note.id} style={{ 
+                    border: '2px solid var(--primary-navy)', 
+                    borderRadius: '8px', 
+                    padding: '16px'
+                  }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '12px'
+                    }}>
+                      <div>
+                        <strong>Note #{index + 1}</strong>
+                        <div style={{ fontSize: '12px', color: 'var(--gray-dark)' }}>
+                          {MEDICAL_SPECIALTIES[note.specialty]?.name} - {MEDICAL_SPECIALTIES[note.specialty]?.noteTypes[note.noteType]}
+                          <br />
+                          Added: {new Date(note.dateAdded).toLocaleDateString()} by {note.addedBy}
+                        </div>
+                      </div>
+                      <button 
+                        className="btn btn-glass btn-small"
+                        onClick={() => removeBaselineNote(note.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    
+                    <div style={{ 
+                      backgroundColor: '#f9fafb', 
+                      padding: '12px', 
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      maxHeight: '150px',
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'monospace'
+                    }}>
+                      {(note.content || '').substring(0, 500)}
+                      {(note.content || '').length > 500 && '...'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderPatientsPage = () => (
+    <div className="content-container">
+      <div className="page-header">
+        <h2 className="page-title">Patient Management</h2>
+        {authService?.hasPermission('add_patients') && (
+          <button className="btn btn-glass-primary" onClick={() => setShowPatientModal(true)}>
+            Add New Patient
+          </button>
+        )}
+      </div>
+
+      <div className="card glass-card">
+        <h3 className="card-title">Patient List</h3>
+        
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search patients by name or date of birth..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        
+        <div className="search-results">{filteredPatients.length} patient(s) found</div>
+
+        <div className="patient-list">
+          {filteredPatients.map(patient => (
+            <div key={patient.id} className="patient-card" onClick={() => {
+              setSelectedPatient(patient);
+              setShowVisitModal(true);
+            }}>
+              <div className="patient-avatar" style={{ backgroundColor: getAvatarColor(patient) }}>
+                {getPatientInitials(patient)}
+              </div>
+              
+              <div className="patient-info">
+                <div className="patient-name">{patient.firstName} {patient.lastName}</div>
+                <div className="patient-id">Patient ID: {patient.id}</div>
+                <div className="patient-dob">DOB: {patient.dateOfBirth}</div>
+              </div>
+              
+              <div className="patient-visits">{patient.visits?.length || 0} visits</div>
+            </div>
+          ))}
+        </div>
+
+        {filteredPatients.length === 0 && (
+          <div className="empty-state">
+            No patients found. {authService?.hasPermission('add_patients') ? 'Add your first patient to get started.' : 'Contact an administrator to add patients.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSettingsPage = () => (
+    <div className="content-container">
+      <div className="page-header">
+        <h2 className="page-title">API Settings</h2>
+      </div>
+
+      <div className="card glass-card">
+        <h3 className="card-title">Azure Configuration</h3>
+        <p className="settings-description">
+          Configure your Azure Speech and OpenAI services. Keys are stored locally and never transmitted.
+        </p>
+
+        <div className="settings-form">
+          <div className="form-group">
+            <label className="form-label">Azure Speech Service Key</label>
+            <input 
+              type={showApiKeys ? "text" : "password"} 
+              className="form-input glass-input" 
+              placeholder="Enter your Azure Speech key"
+              value={apiSettings.speechKey}
+              onChange={(e) => setApiSettings({...apiSettings, speechKey: e.target.value})}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Azure Speech Region</label>
+            <select 
+              className="form-input glass-input"
+              value={apiSettings.speechRegion}
+              onChange={(e) => setApiSettings({...apiSettings, speechRegion: e.target.value})}
+            >
+              <option value="eastus">East US</option>
+              <option value="westus2">West US 2</option>
+              <option value="centralus">Central US</option>
+              <option value="westeurope">West Europe</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Azure OpenAI Endpoint</label>
+            <input 
+              type="text" 
+              className="form-input glass-input" 
+              placeholder="https://your-resource.openai.azure.com/"
+              value={apiSettings.openaiEndpoint}
+              onChange={(e) => setApiSettings({...apiSettings, openaiEndpoint: e.target.value})}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Azure OpenAI API Key</label>
+            <input 
+              type={showApiKeys ? "text" : "password"} 
+              className="form-input glass-input" 
+              placeholder="Enter your OpenAI key"
+              value={apiSettings.openaiKey}
+              onChange={(e) => setApiSettings({...apiSettings, openaiKey: e.target.value})}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">OpenAI Deployment Name</label>
+            <input 
+              type="text" 
+              className="form-input glass-input" 
+              placeholder="gpt-4"
+              value={apiSettings.openaiDeployment}
+              onChange={(e) => setApiSettings({...apiSettings, openaiDeployment: e.target.value})}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">API Version</label>
+            <input 
+              type="text" 
+              className="form-input glass-input" 
+              placeholder="2024-08-01-preview"
+              value={apiSettings.openaiApiVersion}
+              onChange={(e) => setApiSettings({...apiSettings, openaiApiVersion: e.target.value})}
+            />
+          </div>
+
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input 
+                type="checkbox" 
+                checked={showApiKeys}
+                onChange={(e) => setShowApiKeys(e.target.checked)}
+              />
+              Show API Keys
+            </label>
+          </div>
+
+          <button className="btn btn-glass-success" onClick={() => saveApiSettings(apiSettings)}>
+            Save Settings
+          </button>
+          
+          <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--gray-dark)' }}>
+            <strong>Current Status:</strong> 
+            {apiSettings.speechKey && apiSettings.openaiKey ? 
+              <span style={{ color: 'var(--success)' }}> ✓ Configured</span> : 
+              <span style={{ color: 'var(--error)' }}> ✗ Missing required keys</span>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderUsersPage = () => (
+    <div className="content-container">
+      <div className="page-header">
+        <h2 className="page-title">User Management</h2>
+      </div>
+
+      <div className="card glass-card">
+        <h3 className="card-title">System Users</h3>
+        
+        <div style={{ 
+          marginBottom: '16px', 
+          padding: '12px', 
+          backgroundColor: 'rgba(186, 230, 55, 0.1)', 
+          borderRadius: '8px', 
+          border: '2px solid rgba(186, 230, 55, 0.3)' 
+        }}>
+          <strong>Current Users:</strong>
+          <div style={{ marginTop: '8px' }}>
+            • darshan@aayuwell.com - Dr. Darshan Patel (Super Admin)<br />
+            • admin - Admin User (Admin)<br />
+            • doctor - Dr. Provider (Medical Provider)<br />
+            • staff - Support Staff (Support Staff)
+          </div>
+        </div>
+
+        <button 
+          className="btn btn-glass-success"
+          onClick={() => setShowCreateUserModal(true)}
+        >
+          Add New User
+        </button>
+        
+        <div style={{ 
+          marginTop: '16px', 
+          padding: '16px', 
+          backgroundColor: 'rgba(63, 81, 181, 0.05)', 
+          borderRadius: '8px', 
+          fontSize: '14px', 
+          color: 'var(--gray-dark)' 
+        }}>
+          <strong>Note:</strong> User creation is currently in demo mode. Contact your IT administrator to permanently add users.
+        </div>
+      </div>
+    </div>
+  );
 
   // Main render
   return (
@@ -1468,7 +2067,23 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
         {currentUser && renderSidebar()}
         
         <main className="main-content">
-          {currentUser ? renderActivePage() : (
+          {currentUser ? (
+            activeTab === 'scribe' ? renderScribePage() :
+            activeTab === 'training' ? renderTrainingPage() :
+            activeTab === 'patients' ? renderPatientsPage() :
+            activeTab === 'settings' ? renderSettingsPage() :
+            activeTab === 'users' ? renderUsersPage() :
+            (
+              <div className="content-container">
+                <div className="page-header">
+                  <h2 className="page-title">Page Not Found</h2>
+                </div>
+                <div className="card glass-card">
+                  <p>The requested page could not be found.</p>
+                </div>
+              </div>
+            )
+          ) : (
             <div className="login-container">
               <div className="login-background"></div>
               <div className="login-card glass-card">
@@ -1485,9 +2100,9 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
           )}
         </main>
 
-        {/* Login Modal - Redesigned */}
+        {/* Login Modal */}
         {showLoginModal && (
-          <div className="modal-backdrop">
+          <div className="modal-backdrop" onClick={() => setShowLoginModal(false)}>
             <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-logo">
                 <img src={aayuLogo} alt="Aayu Well" className="modal-logo-img" />
@@ -1537,10 +2152,226 @@ ${selectedPatient.visits?.slice(-3).map(visit =>
           </div>
         )}
 
-        {/* Patient Modal - Keep existing */}
+        {/* Patient Modal */}
         {showPatientModal && (
           <div className="modal-backdrop" onClick={() => setShowPatientModal(false)}>
-            {/* Keep existing patient modal code */}
+            <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">Add New Patient</h3>
+                  <p className="modal-subtitle">Enter patient information</p>
+                </div>
+                <button className="modal-close" onClick={() => setShowPatientModal(false)}>×</button>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">First Name *</label>
+                <input
+                  type="text" 
+                  className="form-input glass-input"
+                  value={newPatientData.firstName}
+                  onChange={(e) => setNewPatientData({...newPatientData, firstName: e.target.value})}
+                  placeholder="Enter first name"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Last Name *</label>
+                <input
+                  type="text" 
+                  className="form-input glass-input"
+                  value={newPatientData.lastName}
+                  onChange={(e) => setNewPatientData({...newPatientData, lastName: e.target.value})}
+                  placeholder="Enter last name"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Date of Birth *</label>
+                <input
+                  type="date" 
+                  className="form-input glass-input"
+                  value={newPatientData.dateOfBirth}
+                  onChange={(e) => setNewPatientData({...newPatientData, dateOfBirth: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Medical History</label>
+                <textarea
+                  className="form-textarea glass-input"
+                  value={newPatientData.medicalHistory}
+                  onChange={(e) => setNewPatientData({...newPatientData, medicalHistory: e.target.value})}
+                  placeholder="Enter relevant medical history..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Current Medications</label>
+                <textarea
+                  className="form-textarea glass-input"
+                  value={newPatientData.medications}
+                  onChange={(e) => setNewPatientData({...newPatientData, medications: e.target.value})}
+                  placeholder="List current medications..."
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn btn-glass" onClick={() => setShowPatientModal(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-glass-success" onClick={addPatient}>Save Patient</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Visit Modal */}
+        {showVisitModal && selectedPatient && (
+          <div className="modal-backdrop" onClick={() => setShowVisitModal(false)}>
+            <div className="modal-content glass-modal" style={{ maxWidth: '800px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">{selectedPatient.firstName} {selectedPatient.lastName}</h3>
+                  <p className="modal-subtitle">Patient Record</p>
+                </div>
+                <button className="modal-close" onClick={() => setShowVisitModal(false)}>×</button>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <strong>DOB:</strong> {selectedPatient.dateOfBirth}<br />
+                <strong>Patient ID:</strong> {selectedPatient.id}<br />
+                {selectedPatient.medicalHistory && (
+                  <><strong>Medical History:</strong> {selectedPatient.medicalHistory}<br /></>
+                )}
+                {selectedPatient.medications && (
+                  <><strong>Medications:</strong> {selectedPatient.medications}</>
+                )}
+              </div>
+
+              <h4 style={{ marginBottom: '16px' }}>Visit History</h4>
+              
+              {selectedPatient.visits?.length > 0 ? (
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {selectedPatient.visits.map(visit => (
+                    <div key={visit.id} style={{ 
+                      padding: '16px', 
+                      marginBottom: '12px', 
+                      background: 'rgba(0, 0, 0, 0.02)', 
+                      borderRadius: '8px',
+                      border: '1px solid rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>{visit.date} at {visit.time}</strong>
+                        <div style={{ fontSize: '12px', color: 'var(--gray-dark)' }}>
+                          {MEDICAL_SPECIALTIES[visit.specialty]?.name} - {MEDICAL_SPECIALTIES[visit.specialty]?.noteTypes[visit.noteType]}
+                        </div>
+                      </div>
+                      <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px' }}>
+                        {visit.notes}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">No visits recorded yet</div>
+              )}
+
+              <div className="modal-actions">
+                <button className="btn btn-glass" onClick={() => setShowVisitModal(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create User Modal */}
+        {showCreateUserModal && (
+          <div className="modal-backdrop" onClick={() => setShowCreateUserModal(false)}>
+            <div className="modal-content glass-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h3 className="modal-title">Create New User</h3>
+                  <p className="modal-subtitle">Add a new user to the system</p>
+                </div>
+                <button className="modal-close" onClick={() => setShowCreateUserModal(false)}>×</button>
+              </div>
+
+              <form onSubmit={handleCreateUser}>
+                <div className="form-group">
+                  <label className="form-label">Full Name *</label>
+                  <input
+                    type="text" 
+                    className="form-input glass-input"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                    placeholder="Enter full name"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Username *</label>
+                  <input
+                    type="text" 
+                    className="form-input glass-input"
+                    value={newUser.username}
+                    onChange={(e) => setNewUser({...newUser, username: e.target.value})}
+                    placeholder="Enter username"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Role *</label>
+                  <select 
+                    className="form-input glass-input"
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                    required
+                  >
+                    <option value="medical_provider">Medical Provider</option>
+                    <option value="admin">Admin</option>
+                    <option value="support_staff">Support Staff</option>
+                    <option value="super_admin">Super Admin</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Password *</label>
+                  <input
+                    type="password" 
+                    className="form-input glass-input"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                    placeholder="Enter password (min 8 characters)"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Confirm Password *</label>
+                  <input
+                    type="password" 
+                    className="form-input glass-input"
+                    value={newUser.confirmPassword}
+                    onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
+                    placeholder="Confirm password"
+                    required
+                  />
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-glass" onClick={() => setShowCreateUserModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-glass-success">
+                    Create User
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>
