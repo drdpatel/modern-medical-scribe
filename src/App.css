@@ -98,6 +98,135 @@ input, textarea, [contenteditable], .selectable-text {
 }
 
 /* ============================================
+   LOGIN/WELCOME SCREEN 
+   Beautiful glass morphism login experience
+   ============================================ */
+
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated background effect */
+.login-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.login-background::before {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: radial-gradient(circle, rgba(186, 230, 55, 0.1) 0%, transparent 70%);
+  animation: rotate 30s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Login Card */
+.login-card {
+  position: relative;
+  z-index: 1;
+  padding: 48px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 20px 60px 0 rgba(31, 38, 135, 0.3);
+  border-radius: 24px;
+}
+
+/* Login Logo - FIXED SIZE */
+.login-logo {
+  margin: 0 auto 32px;
+  width: 120px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-logo-img {
+  width: 100%;
+  height: auto;
+  max-width: 120px;
+  object-fit: contain;
+  filter: none;
+}
+
+/* Login Typography */
+.login-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--primary-navy);
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--gray-dark);
+  margin: 0 0 32px 0;
+  font-weight: 400;
+}
+
+/* Login Form */
+.login-form {
+  width: 100%;
+}
+
+/* Login Help */
+.login-help {
+  margin-top: 24px;
+  padding: 16px;
+  background: rgba(186, 230, 55, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 55, 0.2);
+  font-size: 13px;
+  color: var(--gray-dark);
+  text-align: left;
+  line-height: 1.6;
+}
+
+/* Error Message */
+.error-message {
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: var(--error);
+  font-size: 14px;
+  margin-bottom: 16px;
+  animation: shake 0.5s;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* ============================================
    LOADING SCREEN
    Elegant loading for all devices
    ============================================ */
@@ -344,6 +473,25 @@ input, textarea, [contenteditable], .selectable-text {
   margin: 0 auto;
 }
 
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
 /* ============================================
    GLASS CARD COMPONENTS
    Universal card design for all devices
@@ -465,6 +613,47 @@ input, textarea, [contenteditable], .selectable-text {
   transform: none;
 }
 
+/* Button text style */
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--accent-purple);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-text:hover {
+  background: rgba(155, 47, 205, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Button icon style */
+.btn-icon {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-icon:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: scale(1.1);
+}
+
 /* ============================================
    FORM INPUTS
    Optimized for touch and keyboard input
@@ -572,6 +761,91 @@ input, textarea, [contenteditable], .selectable-text {
   font-size: 13px;
 }
 
+/* Transcript and Notes Cards */
+.transcript-container-optimized,
+.notes-container-optimized {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-medium);
+  padding: 20px;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--black);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.placeholder-text {
+  color: var(--gray-medium);
+  font-style: italic;
+}
+
+.interim-text {
+  color: var(--gray-dark);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Warning Banner */
+.warning-banner {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-small);
+  color: var(--warning);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status Bar */
+.status-bar {
+  padding: 12px 16px;
+  border-radius: var(--radius-medium);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  margin: 12px 0;
+  transition: all 0.3s ease;
+}
+
+.status-bar.ready {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--success);
+}
+
+.status-bar.recording {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error);
+  animation: pulse 2s infinite;
+}
+
+.status-bar.paused {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--warning);
+}
+
+.status-bar.processing {
+  background: rgba(155, 47, 205, 0.1);
+  border: 1px solid rgba(155, 47, 205, 0.2);
+  color: var(--accent-purple);
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
 /* ============================================
    RECORDING CONTROLS
    Simple oval button with text
@@ -637,19 +911,6 @@ input, textarea, [contenteditable], .selectable-text {
   box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
 }
 
-/* Remove old circular button styles */
-.recording-controls-modern {
-  display: none;
-}
-
-.btn-record-toggle {
-  display: none;
-}
-
-.btn-stop {
-  display: none;
-}
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
@@ -682,6 +943,57 @@ input, textarea, [contenteditable], .selectable-text {
   outline: none;
   border-color: var(--primary-green);
   box-shadow: 0 0 0 3px rgba(186, 230, 55, 0.1);
+}
+
+/* Search Results */
+.search-results {
+  padding: 8px 16px;
+  background: rgba(186, 230, 55, 0.1);
+  border-radius: var(--radius-small);
+  font-size: 14px;
+  color: var(--primary-navy);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+/* Search Dropdown */
+.search-dropdown,
+.glass-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--glass-bg-heavy);
+  backdrop-filter: var(--blur-heavy);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--glass-shadow-hover);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: var(--z-dropdown);
+  margin-top: 4px;
+}
+
+.search-dropdown-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.search-dropdown-item:hover {
+  background: rgba(186, 230, 55, 0.1);
+  padding-left: 20px;
+}
+
+.search-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item-meta {
+  font-size: 12px;
+  color: var(--gray-dark);
+  margin-top: 2px;
 }
 
 /* Simplified patient card without avatar */
@@ -725,16 +1037,31 @@ input, textarea, [contenteditable], .selectable-text {
   text-decoration: underline;
 }
 
-/* Selected patient in scribe view */
+/* Selected patient card in scribe */
 .selected-patient-card {
-  margin-top: 8px;
-  padding: 10px;
-  background: rgba(186, 230, 55, 0.1);
-  border-radius: var(--radius-medium);
-  border: 1px solid rgba(186, 230, 55, 0.2);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(186, 230, 55, 0.15) 0%,
+    rgba(186, 230, 55, 0.08) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 55, 0.25);
+  margin-top: 12px;
+}
+
+.no-patient-selected {
+  padding: 12px;
+  text-align: center;
+  color: var(--gray-medium);
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-medium);
+  border: 1px dashed rgba(0, 0, 0, 0.1);
+  margin-top: 12px;
 }
 
 .patient-info-compact {
@@ -744,12 +1071,6 @@ input, textarea, [contenteditable], .selectable-text {
 .patient-info-compact .patient-name-clickable {
   font-size: 15px;
   margin-bottom: 2px;
-}
-
-/* Remove avatar-related styles */
-.patient-avatar,
-.patient-avatar-small {
-  display: none;
 }
 
 /* Patient info styles */
@@ -801,7 +1122,7 @@ input, textarea, [contenteditable], .selectable-text {
 
 /* ============================================
    MODALS
-   Adaptive modals for all screen sizes
+   Enhanced glass morphism modals
    ============================================ */
 
 .modal-backdrop {
@@ -822,10 +1143,17 @@ input, textarea, [contenteditable], .selectable-text {
 
 .modal-content,
 .glass-modal {
-  background: var(--glass-bg-heavy);
-  backdrop-filter: var(--blur-heavy);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 20px 60px 0 rgba(31, 38, 135, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.85) 100%
+  );
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 20px 60px 0 rgba(31, 38, 135, 0.25),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   border-radius: var(--radius-large);
   padding: 32px;
   width: min(420px, 90vw);
@@ -834,10 +1162,43 @@ input, textarea, [contenteditable], .selectable-text {
   position: relative;
 }
 
+/* Glass effect overlay */
+.glass-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+}
+
 .patient-modal-large {
   width: min(1000px, 95vw);
   max-width: 1000px;
   padding: 32px;
+}
+
+/* Modal Logo - FIXED SIZE */
+.modal-logo {
+  margin: 0 auto 24px;
+  width: 100px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-logo-img {
+  width: 100%;
+  height: auto;
+  max-width: 100px;
+  object-fit: contain;
 }
 
 .modal-header {
@@ -848,6 +1209,20 @@ input, textarea, [contenteditable], .selectable-text {
   padding-bottom: 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   gap: 16px;
+}
+
+.modal-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--primary-navy);
+  margin: 0;
+}
+
+.modal-subtitle {
+  font-size: 14px;
+  color: var(--gray-dark);
+  margin: 4px 0 0 0;
+  font-weight: 400;
 }
 
 .modal-close {
@@ -907,6 +1282,436 @@ input, textarea, [contenteditable], .selectable-text {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
+}
+
+/* ============================================
+   PATIENT PROFILE MODAL ENHANCEMENTS
+   ============================================ */
+
+/* Patient Profile View */
+.patient-profile-view {
+  margin-top: 24px;
+}
+
+/* Profile Sections with Glass Effect */
+.profile-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 0.3s ease;
+}
+
+.profile-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Section Titles */
+.profile-section-title {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-navy);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-green);
+  display: inline-block;
+}
+
+/* Profile Grid */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+/* Profile Items */
+.profile-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.profile-item:hover {
+  background: rgba(255, 255, 255, 0.7);
+  transform: translateX(2px);
+}
+
+.profile-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.profile-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.profile-value {
+  font-size: 15px;
+  color: var(--primary-navy);
+  font-weight: 500;
+}
+
+/* Visit Timeline with Glass Cards */
+.visit-timeline {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.visit-timeline-item {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: linear-gradient(
+    135deg,
+    rgba(186, 230, 55, 0.08) 0%,
+    rgba(186, 230, 55, 0.03) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 55, 0.2);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.visit-timeline-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 15px rgba(186, 230, 55, 0.2);
+  border-color: rgba(186, 230, 55, 0.4);
+}
+
+.visit-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(186, 230, 55, 0.1);
+}
+
+.visit-date {
+  font-weight: 600;
+  color: var(--primary-navy);
+  font-size: 14px;
+}
+
+.visit-timeline-content {
+  padding-top: 8px;
+}
+
+.visit-meta {
+  font-size: 12px;
+  color: var(--gray-dark);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.visit-preview {
+  font-size: 13px;
+  color: var(--gray-dark);
+  line-height: 1.5;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  border-left: 3px solid var(--primary-green);
+}
+
+/* Quick View Modal */
+.patient-quick-view {
+  padding: 20px 0;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.info-value {
+  font-size: 15px;
+  color: var(--primary-navy);
+  font-weight: 500;
+}
+
+/* ============================================
+   NOTE VIEW MODAL ENHANCEMENTS
+   ============================================ */
+
+.note-view {
+  padding: 20px 0;
+}
+
+.note-metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(
+    135deg,
+    rgba(155, 47, 205, 0.05) 0%,
+    rgba(155, 47, 205, 0.02) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(155, 47, 205, 0.15);
+  margin-bottom: 24px;
+}
+
+.metadata-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.metadata-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-dark);
+  min-width: fit-content;
+}
+
+.metadata-value {
+  font-size: 14px;
+  color: var(--primary-navy);
+  font-weight: 500;
+}
+
+.note-content {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.7) 0%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.note-content h4 {
+  margin: 0 0 12px 0;
+  color: var(--primary-navy);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-green);
+  display: inline-block;
+}
+
+.note-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--black);
+  white-space: pre-wrap;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.note-transcript {
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(186, 230, 55, 0.05) 0%,
+    rgba(186, 230, 55, 0.02) 100%
+  );
+  border-radius: 12px;
+  border: 1px solid rgba(186, 230, 55, 0.15);
+}
+
+.note-transcript h4 {
+  margin: 0 0 12px 0;
+  color: var(--primary-navy);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.transcript-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gray-dark);
+  white-space: pre-wrap;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-style: italic;
+}
+
+/* ============================================
+   SETTINGS PAGE
+   ============================================ */
+
+.settings-description {
+  color: var(--gray-dark);
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.settings-form {
+  max-width: 600px;
+}
+
+/* ============================================
+   EMPTY STATES
+   Enhanced empty state designs
+   ============================================ */
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--gray-dark);
+  font-style: italic;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.3) 100%
+  );
+  border-radius: 12px;
+  border: 2px dashed rgba(186, 230, 55, 0.3);
+}
+
+/* ============================================
+   LOADING STATES
+   Smooth loading experiences
+   ============================================ */
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-overlay);
+  border-radius: inherit;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, 
+    rgba(0, 0, 0, 0.1) 25%, 
+    rgba(0, 0, 0, 0.05) 50%, 
+    rgba(0, 0, 0, 0.1) 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   Beautiful scrollbars across all browsers
+   ============================================ */
+
+/* Webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(186, 230, 55, 0.3);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(186, 230, 55, 0.5);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(186, 230, 55, 0.3) rgba(0, 0, 0, 0.05);
+}
+
+/* Custom scrollbars for modals */
+.visit-timeline::-webkit-scrollbar,
+.note-text::-webkit-scrollbar,
+.transcript-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.visit-timeline::-webkit-scrollbar-track,
+.note-text::-webkit-scrollbar-track,
+.transcript-text::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 3px;
+}
+
+.visit-timeline::-webkit-scrollbar-thumb,
+.note-text::-webkit-scrollbar-thumb,
+.transcript-text::-webkit-scrollbar-thumb {
+  background: rgba(186, 230, 55, 0.3);
+  border-radius: 3px;
+}
+
+.visit-timeline::-webkit-scrollbar-thumb:hover,
+.note-text::-webkit-scrollbar-thumb:hover,
+.transcript-text::-webkit-scrollbar-thumb:hover {
+  background: rgba(186, 230, 55, 0.5);
 }
 
 /* ============================================
@@ -1060,17 +1865,6 @@ input, textarea, [contenteditable], .selectable-text {
     font-size: 14px;
   }
   
-  /* Optimized recording controls for mobile */
-  .btn-record-toggle {
-    width: 80px;
-    height: 80px;
-  }
-  
-  .btn-stop {
-    width: 60px;
-    height: 60px;
-  }
-  
   /* Full-screen modals on mobile */
   .modal-backdrop {
     padding: 0;
@@ -1101,22 +1895,36 @@ input, textarea, [contenteditable], .selectable-text {
     padding: 14px 16px;
   }
   
-  /* Simplified patient cards for mobile */
-  .patient-card {
-    flex-direction: row;
+  /* Login/Welcome mobile optimization */
+  .login-card {
+    padding: 32px 24px;
+  }
+  
+  .login-logo {
+    width: 100px;
+    height: 50px;
+  }
+  
+  .login-title {
+    font-size: 24px;
+  }
+  
+  /* Profile sections mobile */
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
     padding: 16px;
   }
   
-  .patient-avatar {
-    width: 40px;
-    height: 40px;
-    font-size: 16px;
-    margin-right: 12px;
+  .profile-section {
+    padding: 16px;
   }
   
-  .patient-visits {
-    padding: 4px 10px;
-    font-size: 11px;
+  .note-metadata {
+    grid-template-columns: 1fr;
   }
   
   /* Optimized dropdowns for mobile */
@@ -1137,12 +1945,6 @@ input, textarea, [contenteditable], .selectable-text {
   
   .page-title {
     font-size: 24px;
-  }
-  
-  /* Compact status bars */
-  .status-bar {
-    padding: 10px;
-    font-size: 13px;
   }
   
   /* Scrollable transcript and notes */
@@ -1166,21 +1968,6 @@ input, textarea, [contenteditable], .selectable-text {
     padding: 8px;
   }
   
-  /* Smaller recording controls */
-  .btn-record-toggle {
-    width: 70px;
-    height: 70px;
-  }
-  
-  .btn-stop {
-    width: 50px;
-    height: 50px;
-  }
-  
-  .record-icon {
-    font-size: 24px;
-  }
-  
   /* More compact cards */
   .card {
     padding: 16px;
@@ -1188,13 +1975,6 @@ input, textarea, [contenteditable], .selectable-text {
   
   .card-title {
     font-size: 16px;
-  }
-  
-  /* Smaller patient avatars */
-  .patient-avatar {
-    width: 36px;
-    height: 36px;
-    font-size: 14px;
   }
   
   /* Compact buttons */
@@ -1236,22 +2016,6 @@ input, textarea, [contenteditable], .selectable-text {
     padding-bottom: 60px;
   }
   
-  /* Horizontal layout for recording controls */
-  .recording-controls-modern {
-    flex-direction: row;
-  }
-  
-  /* Smaller buttons in landscape */
-  .btn-record-toggle {
-    width: 60px;
-    height: 60px;
-  }
-  
-  .btn-stop {
-    width: 50px;
-    height: 50px;
-  }
-  
   /* Optimize modal height */
   .modal-content,
   .glass-modal {
@@ -1268,7 +2032,7 @@ input, textarea, [contenteditable], .selectable-text {
   /* Remove hover effects on touch devices */
   .btn:hover,
   .nav-button:hover,
-  .patient-card:hover {
+  .patient-card-simple:hover {
     transform: none;
   }
   
@@ -1278,7 +2042,7 @@ input, textarea, [contenteditable], .selectable-text {
     transition: transform 0.1s ease;
   }
   
-  .patient-card:active {
+  .patient-card-simple:active {
     transform: scale(0.99);
     background: var(--glass-bg-heavy);
   }
@@ -1335,7 +2099,7 @@ input, textarea, [contenteditable], .selectable-text {
   .btn,
   .nav-button,
   .modal-actions,
-  .recording-controls-modern,
+  .recording-controls-simple,
   .action-buttons {
     display: none !important;
   }
@@ -1375,7 +2139,7 @@ input, textarea, [contenteditable], .selectable-text {
     page-break-inside: avoid;
   }
   
-  .patient-card {
+  .patient-card-simple {
     page-break-inside: avoid;
   }
 }
@@ -1430,11 +2194,6 @@ input, textarea, [contenteditable], .selectable-text {
   }
 }
 
-/* Dark mode support (future enhancement) */
-@media (prefers-color-scheme: dark) {
-  /* Dark mode styles can be added here */
-}
-
 /* ============================================
    UTILITY CLASSES
    Helpful utilities for all devices
@@ -1477,94 +2236,6 @@ input, textarea, [contenteditable], .selectable-text {
 
 @media (min-width: 1025px) {
   .hide-desktop { display: none !important; }
-}
-
-/* ============================================
-   SCROLLBAR STYLING
-   Beautiful scrollbars across all browsers
-   ============================================ */
-
-/* Webkit browsers */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(186, 230, 55, 0.3);
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(186, 230, 55, 0.5);
-}
-
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(186, 230, 55, 0.3) rgba(0, 0, 0, 0.05);
-}
-
-/* ============================================
-   EMPTY STATES
-   Thoughtful empty state designs
-   ============================================ */
-
-.empty-state {
-  text-align: center;
-  padding: 48px 24px;
-  color: var(--gray-dark);
-  font-style: italic;
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: var(--radius-medium);
-  border: 2px dashed rgba(0, 0, 0, 0.1);
-}
-
-@media (max-width: 767px) {
-  .empty-state {
-    padding: 32px 16px;
-    font-size: 14px;
-  }
-}
-
-/* ============================================
-   LOADING STATES
-   Smooth loading experiences
-   ============================================ */
-
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-overlay);
-  border-radius: inherit;
-}
-
-.skeleton {
-  background: linear-gradient(90deg, 
-    rgba(0, 0, 0, 0.1) 25%, 
-    rgba(0, 0, 0, 0.05) 50%, 
-    rgba(0, 0, 0, 0.1) 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s ease-in-out infinite;
-}
-
-@keyframes loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 /* ============================================
