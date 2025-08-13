@@ -1,0 +1,100 @@
+/* src/styles/reset.css */
+/* Global Reset & Base Styles */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px; /* Prevents zoom on iOS */
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-main);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--black);
+  background: var(--gradient-primary);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Prevent text selection except where needed */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input, textarea, [contenteditable], .selectable-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Focus styles for keyboard navigation */
+:focus-visible {
+  outline: 3px solid var(--primary-green);
+  outline-offset: 2px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(186, 230, 55, 0.3);
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(186, 230, 55, 0.5);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(186, 230, 55, 0.3) rgba(0, 0, 0, 0.05);
+}
+
+/* Custom scrollbars for specific elements */
+.visit-timeline::-webkit-scrollbar,
+.note-text::-webkit-scrollbar,
+.transcript-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.visit-timeline::-webkit-scrollbar-track,
+.note-text::-webkit-scrollbar-track,
+.transcript-text::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 3px;
+}
+
+.visit-timeline::-webkit-scrollbar-thumb,
+.note-text::-webkit-scrollbar-thumb,
+.transcript-text::-webkit-scrollbar-thumb {
+  background: rgba(186, 230, 55, 0.3);
+  border-radius: 3px;
+}
+
+.visit-timeline::-webkit-scrollbar-thumb:hover,
+.note-text::-webkit-scrollbar-thumb:hover,
+.transcript-text::-webkit-scrollbar-thumb:hover {
+  background: rgba(186, 230, 55, 0.5);
+}
