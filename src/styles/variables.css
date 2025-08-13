@@ -1,0 +1,65 @@
+/* src/styles/variables.css */
+/* Design Tokens - Single source of truth for all styles */
+
+:root {
+  /* Primary Brand Colors */
+  --primary-green: #bae637;
+  --primary-navy: #27266b;
+  --accent-purple: #9b2fcd;
+  
+  /* Supporting Colors */
+  --white: #ffffff;
+  --black: #1a1a1a;
+  --gray-light: #f5f7fb;
+  --gray-medium: #9ca3af;
+  --gray-dark: #6b7280;
+  --error: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  
+  /* Glass Design Variables */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  --glass-shadow-hover: 0 12px 40px 0 rgba(31, 38, 135, 0.25);
+  --blur: blur(12px);
+  --blur-heavy: blur(20px);
+  
+  /* Typography with Responsive Scaling */
+  --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  
+  /* Border Radius */
+  --radius-small: 8px;
+  --radius-medium: 12px;
+  --radius-large: 20px;
+  --radius-full: 9999px;
+  
+  /* Minimum Touch Targets for Accessibility */
+  --touch-target-min: 44px;
+  --touch-target-optimal: 48px;
+  
+  /* Z-Index Layers */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  
+  /* Safe Areas for Modern Devices */
+  --safe-top: env(safe-area-inset-top);
+  --safe-right: env(safe-area-inset-right);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-left: env(safe-area-inset-left);
+  
+  /* Transitions */
+  --transition-fast: 0.2s ease;
+  --transition-base: 0.3s ease;
+  --transition-slow: 0.5s ease;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  --gradient-green: linear-gradient(135deg, rgba(186, 230, 55, 0.15) 0%, rgba(186, 230, 55, 0.08) 100%);
+  --gradient-purple: linear-gradient(135deg, rgba(155, 47, 205, 0.05) 0%, rgba(155, 47, 205, 0.02) 100%);
+}
