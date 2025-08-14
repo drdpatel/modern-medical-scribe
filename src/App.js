@@ -772,31 +772,23 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation.`;
   }, [trainingData]);
 
   const generateNotes = useCallback(async () => {
-    try {
-      if (!authService?.hasPermission('scribe')) {
-        setStatus('You do not have permission to generate notes');
-        return;
-      }
+  try {
+    if (!authService?.hasPermission('scribe')) {
+      setStatus('You do not have permission to generate notes');
+      return;
+    }
 
-      if (!transcript?.trim()) {
-        setStatus('No transcript available. Please record first.');
-        return;
-      }
+    if (!transcript?.trim()) {
+      setStatus('No transcript available. Please record first.');
+      return;
+    }
 
-      const { openaiEndpoint, openaiKey, openaiDeployment, openaiApiVersion } = apiSettings;
+    setIsProcessing(true);
+    setStatus('AI generating medical notes...');
 
-      if (!openaiEndpoint?.trim() || !openaiKey?.trim() || !openaiDeployment?.trim()) {
-        setStatus('Please configure Azure OpenAI settings first');
-        setActiveTab('settings');
-        return;
-      }
-
-      setIsProcessing(true);
-      setStatus('AI generating medical notes...');
-
-      let patientContext = '';
-      if (selectedPatient) {
-        patientContext = `
+    let patientContext = '';
+    if (selectedPatient) {
+      patientContext = `
 PATIENT CONTEXT:
 Name: ${selectedPatient.firstName || ''} ${selectedPatient.lastName || ''}
 DOB: ${selectedPatient.dateOfBirth || 'Not specified'}
@@ -804,69 +796,53 @@ Gender: ${selectedPatient.gender || 'Not specified'}
 Allergies: ${selectedPatient.allergies || 'NKDA'}
 Medical History: ${selectedPatient.medicalHistory || 'No significant medical history recorded'}
 Current Medications: ${selectedPatient.medications || 'No current medications recorded'}`;
-      } else {
-        patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
-      }
-
-      const systemPrompt = generateSpecialtyPrompt();
-
-      const endpoint = openaiEndpoint.trim();
-      const baseUrl = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
-      const apiUrl = `${baseUrl}/openai/deployments/${openaiDeployment}/chat/completions?api-version=${openaiApiVersion}`;
-
-      const requestData = {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `${patientContext}\n\nCURRENT VISIT TRANSCRIPT:\n${transcript}\n\nPlease convert this into a structured medical note.` }
-        ],
-        max_tokens: 2000,
-        temperature: 0.1,
-        top_p: 0.9,
-        frequency_penalty: 0.1
-      };
-
-      const response = await axios.post(apiUrl, requestData, {
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': openaiKey
-        },
-        timeout: 30000,
-        validateStatus: (status) => status < 500
-      });
-
-      if (response.status !== 200) {
-        throw new Error(`API returned status ${response.status}: ${response.data?.error?.message || 'Unknown error'}`);
-      }
-
-      if (!response.data?.choices?.[0]?.message?.content) {
-        throw new Error('Invalid response from OpenAI API');
-      }
-
-      const rawNotes = response.data.choices[0].message.content;
-      const cleanedNotes = cleanMarkdownFormatting(rawNotes);
-      
-      setMedicalNotes(cleanedNotes);
-      setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
-      
-    } catch (error) {
-      console.error('AI generation error:', error);
-      let errorMessage = 'Failed to generate notes: ';
-      
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Request timed out. Please try again.';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'OpenAI authentication failed. Check your API key.';
-      } else if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Unknown error occurred';
-      }
-      
-      setStatus(errorMessage);
-    } finally {
-      setIsProcessing(false);
+    } else {
+      patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
     }
-  }, [transcript, selectedPatient, apiSettings, trainingData, generateSpecialtyPrompt]);
+
+    const systemPrompt = generateSpecialtyPrompt();
+
+    // Call YOUR backend API instead of OpenAI directly
+    const response = await axios.post(
+      'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api/generate-notes',
+      {
+        transcript: transcript,
+        patientContext: patientContext,
+        systemPrompt: systemPrompt
+      },
+      {
+        timeout: 30000
+      }
+    );
+
+    if (!response.data?.notes) {
+      throw new Error('Invalid response from API');
+    }
+
+    const cleanedNotes = cleanMarkdownFormatting(response.data.notes);
+    
+    setMedicalNotes(cleanedNotes);
+    setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
+    
+  } catch (error) {
+    console.error('AI generation error:', error);
+    let errorMessage = 'Failed to generate notes: ';
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Request timed out. Please try again.';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Authentication failed.';
+    } else if (error.message) {
+      errorMessage += error.message;
+    } else {
+      errorMessage += 'Unknown error occurred';
+    }
+    
+    setStatus(errorMessage);
+  } finally {
+    setIsProcessing(false);
+  }
+}, [transcript, selectedPatient, trainingData, generateSpecialtyPrompt]);
 
   const saveVisit = useCallback(async () => {
     try {
