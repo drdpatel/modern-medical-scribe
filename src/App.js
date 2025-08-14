@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
+import speechService from './services/speechService';
 import './App.css';
 
 // Import components
