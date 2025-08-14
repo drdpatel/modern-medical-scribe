@@ -380,42 +380,8 @@ function App() {
         recordingTimerRef.current = null;
       }
       
-      if (recognizerRef.current) {
-        try {
-          recognizerRef.current.stopContinuousRecognitionAsync(
-            () => {
-              console.log('Speech recognizer stopped');
-              if (recognizerRef.current) {
-                recognizerRef.current.dispose();
-                recognizerRef.current = null;
-              }
-            },
-            (error) => {
-              console.error('Error stopping recognizer:', error);
-              if (recognizerRef.current) {
-                try {
-                  recognizerRef.current.dispose();
-                } catch (disposeError) {
-                  console.error('Error disposing recognizer:', disposeError);
-                }
-                recognizerRef.current = null;
-              }
-            }
-          );
-        } catch (stopError) {
-          console.error('Error in stop process:', stopError);
-          recognizerRef.current = null;
-        }
-      }
-      
-      if (audioConfigRef.current) {
-        try {
-          audioConfigRef.current.close();
-        } catch (closeError) {
-          console.error('Error closing audio config:', closeError);
-        }
-        audioConfigRef.current = null;
-      }
+      // Use the speech service cleanup
+      speechService.cleanup();
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
@@ -425,14 +391,6 @@ function App() {
     try {
       if (!authService?.hasPermission('scribe')) {
         setStatus('You do not have permission to record');
-        return;
-      }
-
-      const { speechKey, speechRegion } = apiSettings;
-      
-      if (!speechKey?.trim() || !speechRegion?.trim()) {
-        setStatus('Please configure Azure Speech settings first');
-        setActiveTab('settings');
         return;
       }
 
@@ -453,139 +411,97 @@ function App() {
         return;
       }
       
-      cleanupSpeechRecognizer();
+      setStatus('Initializing speech service...');
       
-      const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
-      speechConfig.speechRecognitionLanguage = SPEECH_CONFIG.language;
-      speechConfig.enableDictation();
-      
-      // Set properties to prevent auto-stop on silence
-      speechConfig.setProperty(
-        SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
-        SPEECH_CONFIG.endSilenceTimeoutMs
-      );
-      speechConfig.setProperty(
-        SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
-        SPEECH_CONFIG.initialSilenceTimeoutMs
-      );
-      speechConfig.setProperty(
-        SpeechSDK.PropertyId.Speech_SegmentationSilenceTimeoutMs,
-        SPEECH_CONFIG.segmentationSilenceTimeoutMs
-      );
-      
-      audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-      recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
-
-      // Set up event handlers
-      recognizerRef.current.recognizing = (s, e) => {
-        try {
-          if (e.result?.text) {
-            setInterimTranscript(e.result.text);
-            if (silenceTimeoutRef.current) {
-              clearTimeout(silenceTimeoutRef.current);
+      // Use the speech service to start recording
+      await speechService.startRecognition({
+        onRecognizing: (s, e) => {
+          try {
+            if (e.result?.text) {
+              setInterimTranscript(e.result.text);
+              if (silenceTimeoutRef.current) {
+                clearTimeout(silenceTimeoutRef.current);
+              }
             }
+          } catch (error) {
+            console.error('Error in recognizing event:', error);
           }
-        } catch (error) {
-          console.error('Error in recognizing event:', error);
-        }
-      };
-
-      recognizerRef.current.recognized = (s, e) => {
-        try {
-          if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
-            setTranscript(prev => {
-              const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
-              return newText;
-            });
-            setInterimTranscript('');
-            
-            if (silenceTimeoutRef.current) {
-              clearTimeout(silenceTimeoutRef.current);
+        },
+        
+        onRecognized: (s, e) => {
+          try {
+            if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
+              setTranscript(prev => {
+                const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
+                return newText;
+              });
+              setInterimTranscript('');
+              
+              if (silenceTimeoutRef.current) {
+                clearTimeout(silenceTimeoutRef.current);
+              }
             }
+          } catch (error) {
+            console.error('Error in recognized event:', error);
           }
-        } catch (error) {
-          console.error('Error in recognized event:', error);
-        }
-      };
-
-      recognizerRef.current.sessionStarted = (s, e) => {
-        console.log('Recording session started');
-        setStatus('Recording... Speak now');
-      };
-
-      recognizerRef.current.sessionStopped = (s, e) => {
-        console.log('Recording session stopped');
-        setIsRecording(false);
-        setIsPaused(false);
-        setStatus('Recording session ended');
-      };
-
-      recognizerRef.current.canceled = (s, e) => {
-        try {
-          console.error('Recognition canceled:', e.reason, e.errorDetails);
+        },
+        
+        onSessionStarted: (s, e) => {
+          console.log('Recording session started');
+          setStatus('Recording... Speak now');
+        },
+        
+        onSessionStopped: (s, e) => {
+          console.log('Recording session stopped');
           setIsRecording(false);
           setIsPaused(false);
-          
-          if (e.reason === SpeechSDK.CancellationReason.Error) {
-            if (e.errorCode === SpeechSDK.CancellationErrorCode.ConnectionFailure) {
-              setStatus('Connection failed. Check your internet connection.');
-            } else if (e.errorCode === SpeechSDK.CancellationErrorCode.AuthenticationFailure) {
-              setStatus('Authentication failed. Check your Speech Service key.');
-            } else {
-              setStatus(`Recognition error: ${e.errorDetails}`);
-            }
-          }
-          cleanupSpeechRecognizer();
-        } catch (error) {
-          console.error('Error in canceled event:', error);
-        }
-      };
-
-      // Start continuous recognition
-      await new Promise((resolve, reject) => {
-        recognizerRef.current.startContinuousRecognitionAsync(
-          () => {
-            console.log('Continuous recognition started');
-            setIsRecording(true);
-            setIsPaused(false);
-            setRecordingDuration(0);
-            setStatus('Recording... Speak now');
-            resolve();
-          },
-          (error) => {
-            console.error('Start recording error:', error);
+          setStatus('Recording session ended');
+        },
+        
+        onCanceled: (s, e) => {
+          try {
+            console.error('Recognition canceled:', e.reason, e.errorDetails);
             setIsRecording(false);
             setIsPaused(false);
-            setStatus(`Recording failed: ${error}`);
-            reject(error);
+            
+            if (e.reason === SpeechSDK.CancellationReason.Error) {
+              if (e.errorCode === SpeechSDK.CancellationErrorCode.ConnectionFailure) {
+                setStatus('Connection failed. Check your internet connection.');
+              } else if (e.errorCode === SpeechSDK.CancellationErrorCode.AuthenticationFailure) {
+                setStatus('Authentication failed. Please try logging in again.');
+              } else {
+                setStatus(`Recognition error: ${e.errorDetails}`);
+              }
+            }
+            cleanupSpeechRecognizer();
+          } catch (error) {
+            console.error('Error in canceled event:', error);
           }
-        );
+        }
       });
       
+      setIsRecording(true);
+      setIsPaused(false);
+      setRecordingDuration(0);
+      setStatus('Recording... Speak now');
+      
     } catch (error) {
-      console.error('Start recording setup error:', error);
-      setStatus(`Setup failed: ${error.message}`);
+      console.error('Start recording error:', error);
+      setStatus(`Recording failed: ${error.message}`);
       setIsRecording(false);
       setIsPaused(false);
       cleanupSpeechRecognizer();
     }
-  }, [apiSettings, isRecording, isPaused, cleanupSpeechRecognizer]);
+  }, [isRecording, isPaused, cleanupSpeechRecognizer]);
 
-  const pauseRecording = useCallback(() => {
+  const pauseRecording = useCallback(async () => {
     try {
-      if (recognizerRef.current && isRecording && !isPaused) {
-        recognizerRef.current.stopContinuousRecognitionAsync(
-          () => {
-            setIsPaused(true);
-            setInterimTranscript('');
-            setStatus('Recording paused');
-            console.log('Recording paused successfully');
-          },
-          (error) => {
-            console.error('Pause failed:', error);
-            setStatus('Pause failed: ' + error);
-          }
-        );
+      if (isRecording && !isPaused) {
+        await speechService.pauseRecognition();
+        setIsPaused(true);
+        setInterimTranscript('');
+        setStatus('Recording paused');
+        console.log('Recording paused successfully');
       }
     } catch (error) {
       console.error('Pause recording error:', error);
@@ -597,118 +513,63 @@ function App() {
     try {
       if (!isPaused) return;
       
-      const { speechKey, speechRegion } = apiSettings;
+      setStatus('Resuming recording...');
       
-      if (!speechKey?.trim() || !speechRegion?.trim()) {
-        setStatus('Missing API configuration');
-        return;
-      }
-      
-      if (recognizerRef.current) {
-        recognizerRef.current.dispose();
-        recognizerRef.current = null;
-      }
-      
-      const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(speechKey, speechRegion);
-      speechConfig.speechRecognitionLanguage = SPEECH_CONFIG.language;
-      speechConfig.enableDictation();
-      
-      speechConfig.setProperty(
-        SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
-        SPEECH_CONFIG.endSilenceTimeoutMs
-      );
-      speechConfig.setProperty(
-        SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
-        SPEECH_CONFIG.initialSilenceTimeoutMs
-      );
-      
-      audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-      recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
-
-      recognizerRef.current.recognizing = (s, e) => {
-        try {
-          if (e.result?.text) {
-            setInterimTranscript(e.result.text);
+      await speechService.resumeRecognition({
+        onRecognizing: (s, e) => {
+          try {
+            if (e.result?.text) {
+              setInterimTranscript(e.result.text);
+            }
+          } catch (error) {
+            console.error('Error in recognizing event (resume):', error);
           }
-        } catch (error) {
-          console.error('Error in recognizing event (resume):', error);
+        },
+        
+        onRecognized: (s, e) => {
+          try {
+            if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
+              setTranscript(prev => {
+                const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
+                return newText;
+              });
+              setInterimTranscript('');
+            }
+          } catch (error) {
+            console.error('Error in recognized event (resume):', error);
+          }
         }
-      };
-
-      recognizerRef.current.recognized = (s, e) => {
-        try {
-          if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
-            setTranscript(prev => {
-              const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
-              return newText;
-            });
-            setInterimTranscript('');
-          }
-        } catch (error) {
-          console.error('Error in recognized event (resume):', error);
-        }
-      };
-
-      await new Promise((resolve, reject) => {
-        recognizerRef.current.startContinuousRecognitionAsync(
-          () => {
-            setIsPaused(false);
-            setIsRecording(true);
-            setStatus('Recording resumed... Speak now');
-            console.log('Recording resumed successfully');
-            resolve();
-          },
-          (error) => {
-            console.error('Resume failed:', error);
-            setStatus('Resume failed: ' + error);
-            reject(error);
-          }
-        );
       });
+      
+      setIsPaused(false);
+      setIsRecording(true);
+      setStatus('Recording resumed... Speak now');
+      console.log('Recording resumed successfully');
+      
     } catch (error) {
       console.error('Resume recording error:', error);
       setStatus('Error resuming recording');
     }
-  }, [isPaused, apiSettings]);
+  }, [isPaused]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
     try {
-      if (recognizerRef.current) {
-        recognizerRef.current.stopContinuousRecognitionAsync(
-          () => {
-            console.log('Recording stopped successfully');
-            setIsRecording(false);
-            setIsPaused(false);
-            setInterimTranscript('');
-            setRecordingDuration(0);
-            setStatus('Recording complete');
-            cleanupSpeechRecognizer();
-          },
-          (error) => {
-            console.error('Stop recording error:', error);
-            setIsRecording(false);
-            setIsPaused(false);
-            setInterimTranscript('');
-            setRecordingDuration(0);
-            setStatus('Recording stopped with error');
-            cleanupSpeechRecognizer();
-          }
-        );
-      } else {
-        setIsRecording(false);
-        setIsPaused(false);
-        setInterimTranscript('');
-        setRecordingDuration(0);
-        setStatus('Recording complete');
-      }
+      await speechService.stopRecognition();
+      cleanupSpeechRecognizer();
+      
+      setIsRecording(false);
+      setIsPaused(false);
+      setInterimTranscript('');
+      setRecordingDuration(0);
+      setStatus('Recording complete');
+      
     } catch (error) {
       console.error('Stop recording error:', error);
       setIsRecording(false);
       setIsPaused(false);
       setInterimTranscript('');
       setRecordingDuration(0);
-      setStatus('Error stopping recording');
-      cleanupSpeechRecognizer();
+      setStatus('Recording stopped');
     }
   }, [cleanupSpeechRecognizer]);
 
@@ -721,7 +582,7 @@ function App() {
       await resumeRecording();
     }
   }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording]);
-
+  
   // =============== AI GENERATION ===============
 
   const generateSpecialtyPrompt = useCallback(() => {
