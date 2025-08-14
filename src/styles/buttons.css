@@ -75,6 +75,35 @@
   box-shadow: 0 4px 15px 0 rgba(16, 185, 129, 0.3);
 }
 
+/* NEW: Subtle button variants with toned-down colors */
+.btn-glass-subtle-accent {
+  background: rgba(155, 47, 205, 0.15);
+  backdrop-filter: var(--blur);
+  border: 1px solid rgba(155, 47, 205, 0.2);
+  color: var(--accent-purple);
+  box-shadow: 0 2px 8px 0 rgba(155, 47, 205, 0.1);
+}
+
+.btn-glass-subtle-accent:hover:not(:disabled) {
+  background: rgba(155, 47, 205, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px 0 rgba(155, 47, 205, 0.2);
+}
+
+.btn-glass-subtle-success {
+  background: rgba(16, 185, 129, 0.15);
+  backdrop-filter: var(--blur);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--success);
+  box-shadow: 0 2px 8px 0 rgba(16, 185, 129, 0.1);
+}
+
+.btn-glass-subtle-success:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px 0 rgba(16, 185, 129, 0.2);
+}
+
 /* Size variants */
 .btn-small {
   padding: 8px 16px;
