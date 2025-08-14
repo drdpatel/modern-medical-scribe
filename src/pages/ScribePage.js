@@ -99,7 +99,7 @@ const ScribePage = ({
               </div>
 
               {selectedPatient ? (
-                <div className="selected-patient-card">
+                <div className="selected-patient-card-enhanced">
                   <div className="patient-info-compact">
                     <div 
                       className="patient-name-clickable"
@@ -137,21 +137,24 @@ const ScribePage = ({
               )}
             </div>
 
-            {/* Note Type Selection */}
+            {/* Note Type Selection - Modern Glass Style */}
             <div className="config-section">
               <label className="section-label">Note Type</label>
-              <select 
-                className="form-input glass-input"
-                value={trainingData.noteType}
-                onChange={(e) => {
-                  const newData = { ...trainingData, noteType: e.target.value };
-                  onTrainingDataChange(newData);
-                }}
-              >
-                {Object.entries(MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes || {}).map(([key, name]) => (
-                  <option key={key} value={key}>{name}</option>
-                ))}
-              </select>
+              <div className="custom-select-wrapper">
+                <select 
+                  className="form-select glass-select"
+                  value={trainingData.noteType}
+                  onChange={(e) => {
+                    const newData = { ...trainingData, noteType: e.target.value };
+                    onTrainingDataChange(newData);
+                  }}
+                >
+                  {Object.entries(MEDICAL_SPECIALTIES[trainingData.specialty]?.noteTypes || {}).map(([key, name]) => (
+                    <option key={key} value={key}>{name}</option>
+                  ))}
+                </select>
+                <div className="select-arrow">▼</div>
+              </div>
             </div>
           </div>
 
@@ -165,7 +168,7 @@ const ScribePage = ({
               </div>
             )}
             
-            <div className="recording-controls-simple">
+            <div className="recording-controls-horizontal">
               <button 
                 className={`btn-record-oval ${isRecording && !isPaused ? 'recording' : isPaused ? 'paused' : ''}`}
                 onClick={onToggleRecording}
@@ -187,12 +190,12 @@ const ScribePage = ({
             </div>
 
             <div className={`status-bar ${isRecording ? 'recording' : isPaused ? 'paused' : isProcessing ? 'processing' : 'ready'}`}>
-              {status}
+              {status === 'Login successful - Ready to begin' ? 'Ready to begin' : status}
             </div>
 
             <div className="action-buttons">
               <button 
-                className="btn btn-glass-accent"
+                className="btn btn-glass-subtle-accent"
                 onClick={onGenerateNotes}
                 disabled={!transcript || isProcessing}
               >
@@ -200,7 +203,7 @@ const ScribePage = ({
               </button>
               
               <button 
-                className="btn btn-glass-success"
+                className="btn btn-glass-subtle-success"
                 onClick={onSaveVisit}
                 disabled={!medicalNotes || !selectedPatient}
               >
