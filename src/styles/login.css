@@ -84,17 +84,9 @@
   font-weight: 400;
 }
 
-/* Login Help */
-.login-help {
-  margin-top: 24px;
-  padding: 16px;
-  background: rgba(186, 230, 55, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(186, 230, 55, 0.2);
-  font-size: 13px;
-  color: var(--gray-dark);
-  text-align: left;
-  line-height: 1.6;
+/* Login Form */
+.login-form {
+  width: 100%;
 }
 
 /* Loading Screen */
