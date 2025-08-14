@@ -36,6 +36,8 @@ const LoginModal = ({
               onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
               placeholder="Username"
               required
+              autoComplete="username"
+              autoFocus
             />
           </div>
 
@@ -47,6 +49,7 @@ const LoginModal = ({
               onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
               placeholder="Password"
               required
+              autoComplete="current-password"
             />
           </div>
 
@@ -60,11 +63,6 @@ const LoginModal = ({
             Sign In
           </button>
         </form>
-
-        <div className="login-help">
-          <strong>Demo Credentials:</strong><br />
-          darshan@aayuwell.com / Aayuscribe1212@
-        </div>
       </div>
     </div>
   );
