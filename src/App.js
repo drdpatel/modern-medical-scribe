@@ -284,125 +284,35 @@ function App() {
 
   // =============== AUTHENTICATION ===============
 
-  const handleLogin = useCallback(async (e) => {
-    e.preventDefault();
-    setLoginError('');
-    debugLog('Login attempt', { username: loginForm.username });
+  // Replace the handleLogin function in App.js with this SIMPLE VERSION:
+
+const handleLogin = useCallback((e) => {
+  e.preventDefault();
+  setLoginError('');
+  
+  try {
+    if (!loginForm.username || !loginForm.password) {
+      setLoginError('Please enter username and password');
+      return;
+    }
     
-    try {
-      if (!loginForm.username?.trim() || !loginForm.password?.trim()) {
-        setLoginError('Please enter both username and password');
-        return;
-      }
-      
-      // Use the async login method from authService
-      const result = await authService.login(loginForm.username.trim(), loginForm.password);
-      
-      if (result.success) {
-        const user = result.user;
-        debugLog('Login successful', { username: user.username, role: user.role });
-        
-        setCurrentUser(user);
-        setShowLoginModal(false);
-        setLoginForm({ username: '', password: '' });
-        setStatus('Login successful - Ready to begin');
-        
-        // Load user data after successful login
-        await loadPatientsFromStorage();
-        loadTrainingData();
-      } else {
-        setLoginError(result.error || 'Login failed. Please try again.');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setLoginError(error.message || 'Login failed. Please check your connection and try again.');
-    }
-  }, [loginForm, loadPatientsFromStorage, loadTrainingData, debugLog]);
-
-  const handleLogout = useCallback(() => {
-    try {
-      debugLog('Logging out...');
-      cleanupSpeechRecognizer();
-      
-      if (authService) {
-        authService.logout();
-      }
-      
-      // Reset all states
-      setCurrentUser(null);
-      setPatients([]);
-      setSelectedPatient(null);
-      setTranscript('');
-      setInterimTranscript('');
-      setMedicalNotes('');
-      setIsRecording(false);
-      setIsPaused(false);
-      setRecordingDuration(0);
-      setStatus('Please log in to continue');
-      setShowLoginModal(true);
-      setActiveTab('scribe');
-      
-      debugLog('Logout complete');
-    } catch (error) {
-      console.error('Logout error:', error);
-      setCurrentUser(null);
-      setShowLoginModal(true);
-    }
-  }, [debugLog]);
-
-  const handleCreateUser = useCallback(async (e) => {
-    e.preventDefault();
-    debugLog('Creating user', { username: newUser.username, role: newUser.role });
+    // Simple synchronous login
+    const user = authService.login(loginForm.username, loginForm.password);
     
-    try {
-      if (!newUser.username?.trim() || !newUser.password?.trim() || !newUser.name?.trim()) {
-        alert('Please fill in all required fields');
-        return;
-      }
-      
-      if (newUser.password !== newUser.confirmPassword) {
-        alert('Passwords do not match');
-        return;
-      }
-
-      if (newUser.password.length < 6) {
-        alert('Password must be at least 6 characters long');
-        return;
-      }
-
-      // Call backend API to create user
-      const response = await axios.post(
-        `${apiBaseUrl}/users`,
-        {
-          username: newUser.username.trim(),
-          password: newUser.password,
-          name: newUser.name.trim(),
-          email: newUser.email?.trim() || '',
-          role: newUser.role || 'staff'
-        },
-        {
-          headers: authService.getAuthHeaders(),
-          timeout: 10000
-        }
-      );
-
-      if (response.data) {
-        setShowCreateUserModal(false);
-        setNewUser(DEFAULT_USER_DATA);
-        alert('User created successfully');
-      }
-    } catch (error) {
-      console.error('Create user error:', error);
-      if (error.response?.status === 403) {
-        alert('You do not have permission to create users');
-      } else if (error.response?.status === 400) {
-        alert(error.response.data?.error || 'Invalid user data');
-      } else {
-        alert('Failed to create user: ' + (error.message || 'Unknown error'));
-      }
+    if (user) {
+      console.log('Login successful:', user);
+      setCurrentUser(user);
+      setShowLoginModal(false);
+      setLoginForm({ username: '', password: '' });
+      setStatus('Login successful - Ready to begin');
+      loadPatientsFromLocalStorage();
+      loadTrainingData();
     }
-  }, [newUser, apiBaseUrl, debugLog]);
-
+  } catch (error) {
+    console.error('Login error:', error);
+    setLoginError(error.message || 'Invalid credentials. Try: doctor/doctor123');
+  }
+}, [loginForm, loadPatientsFromLocalStorage, loadTrainingData]);
   // =============== PATIENT MANAGEMENT ===============
 
   const addPatient = useCallback(async () => {
