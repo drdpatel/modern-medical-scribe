@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import axios from 'axios';
 import authService from './authService';
-import speechService from './services/speechService';
 import './App.css';
 
 // Import components
@@ -40,7 +39,6 @@ import {
 } from './utils/helpers';
 
 import aayuLogo from './utils/logo';
-import apiService from './services/api';
 
 function App() {
   // Authentication states
@@ -75,6 +73,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('Please log in to continue');
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
 
   // API settings states
   const [apiSettings, setApiSettings] = useState(DEFAULT_API_SETTINGS);
@@ -90,6 +89,16 @@ function App() {
   const silenceTimeoutRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const activityCheckRef = useRef(null);
+
+  // API configuration
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api';
+
+  // =============== DEBUGGING HELPER ===============
+  const debugLog = useCallback((message, data = null) => {
+    if (process.env.NODE_ENV === 'development' || localStorage.getItem('debugMode') === 'true') {
+      console.log(`[App] ${message}`, data || '');
+    }
+  }, []);
 
   // =============== EFFECTS ===============
 
@@ -117,7 +126,7 @@ function App() {
   useEffect(() => {
     const handleActivity = () => {
       if (currentUser && authService) {
-        authService.updateActivity();
+        authService.updateSession();
       }
     };
 
@@ -126,7 +135,8 @@ function App() {
 
     // Check session validity every minute
     activityCheckRef.current = setInterval(() => {
-      if (currentUser && authService && !authService.isSessionValid()) {
+      if (currentUser && authService && !authService.isAuthenticated()) {
+        debugLog('Session expired, logging out');
         handleLogout();
       }
     }, 60000);
@@ -143,30 +153,40 @@ function App() {
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true);
+      debugLog('Initializing app...');
+      
       try {
         if (!authService) {
           throw new Error('Authentication service not available');
         }
         
-        const user = authService.currentUser;
-        if (user) {
+        // Check if user is already logged in
+        const user = authService.getCurrentUser();
+        if (user && authService.isAuthenticated()) {
+          debugLog('User already authenticated', { username: user.username, role: user.role });
           setCurrentUser(user);
           setStatus('Ready to begin');
-          loadPatientsFromLocalStorage();
+          await loadPatientsFromStorage();
           loadTrainingData();
         } else {
+          debugLog('No authenticated user, showing login');
           setShowLoginModal(true);
         }
         
-        // Load API settings
-        const savedApiSettings = await apiService.getApiSettings();
+        // Load API settings from localStorage
+        const savedApiSettings = localStorage.getItem('apiSettings');
         if (savedApiSettings) {
-          setApiSettings(prev => ({ ...prev, ...savedApiSettings }));
+          try {
+            const parsed = JSON.parse(savedApiSettings);
+            setApiSettings(prev => ({ ...prev, ...parsed }));
+          } catch (e) {
+            debugLog('Failed to parse saved API settings');
+          }
         }
       } catch (error) {
         console.error('App initialization error:', error);
         setShowLoginModal(true);
-        setStatus('Initialization failed: ' + error.message);
+        setStatus('Please log in to continue');
       } finally {
         setIsLoading(false);
       }
@@ -188,19 +208,20 @@ function App() {
 
   // =============== DATA MANAGEMENT ===============
 
-  const loadTrainingData = useCallback(async () => {
+  const loadTrainingData = useCallback(() => {
     try {
-      const saved = await apiService.getTrainingData();
+      const saved = localStorage.getItem('trainingData');
       if (saved) {
-        const validSpecialty = MEDICAL_SPECIALTIES[saved.specialty] ? saved.specialty : 'internal_medicine';
-        const validNoteType = MEDICAL_SPECIALTIES[validSpecialty].noteTypes[saved.noteType] ? 
-          saved.noteType : 'progress_note';
+        const parsed = JSON.parse(saved);
+        const validSpecialty = MEDICAL_SPECIALTIES[parsed.specialty] ? parsed.specialty : 'internal_medicine';
+        const validNoteType = MEDICAL_SPECIALTIES[validSpecialty].noteTypes[parsed.noteType] ? 
+          parsed.noteType : 'progress_note';
         
         setTrainingData({
           specialty: validSpecialty,
           noteType: validNoteType,
-          baselineNotes: Array.isArray(saved.baselineNotes) ? saved.baselineNotes.slice(-5) : [],
-          customTemplates: saved.customTemplates || {}
+          baselineNotes: Array.isArray(parsed.baselineNotes) ? parsed.baselineNotes.slice(-5) : [],
+          customTemplates: parsed.customTemplates || {}
         });
       }
     } catch (error) {
@@ -209,7 +230,7 @@ function App() {
     }
   }, []);
 
-  const saveTrainingData = useCallback(async (data) => {
+  const saveTrainingData = useCallback((data) => {
     try {
       const sanitizedData = {
         specialty: MEDICAL_SPECIALTIES[data.specialty] ? data.specialty : 'internal_medicine',
@@ -218,29 +239,55 @@ function App() {
         customTemplates: data.customTemplates || {}
       };
       
-      await apiService.saveTrainingData(sanitizedData);
+      localStorage.setItem('trainingData', JSON.stringify(sanitizedData));
       setTrainingData(sanitizedData);
+      debugLog('Training data saved', sanitizedData);
     } catch (error) {
       console.error('Failed to save training data:', error);
       setStatus('Warning: Failed to save training data');
     }
-  }, []);
+  }, [debugLog]);
 
-  const loadPatientsFromLocalStorage = useCallback(async () => {
+  const loadPatientsFromStorage = useCallback(async () => {
     try {
-      const patientsData = await apiService.getPatients();
-      setPatients(patientsData);
+      debugLog('Loading patients...');
+      
+      // Try to load from backend API first
+      if (currentUser) {
+        const response = await axios.get(`${apiBaseUrl}/patients`, {
+          headers: authService.getAuthHeaders(),
+          timeout: 5000
+        });
+        
+        if (response.data) {
+          setPatients(response.data);
+          debugLog(`Loaded ${response.data.length} patients from API`);
+          return;
+        }
+      }
     } catch (error) {
-      console.error('Failed to load patients:', error);
+      debugLog('Failed to load patients from API, using localStorage', error.message);
+    }
+    
+    // Fallback to localStorage
+    try {
+      const saved = localStorage.getItem('patients');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setPatients(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch (error) {
+      console.error('Failed to load patients from localStorage:', error);
       setPatients([]);
     }
-  }, []);
+  }, [currentUser, apiBaseUrl, debugLog]);
 
   // =============== AUTHENTICATION ===============
 
-  const handleLogin = useCallback((e) => {
+  const handleLogin = useCallback(async (e) => {
     e.preventDefault();
     setLoginError('');
+    debugLog('Login attempt', { username: loginForm.username });
     
     try {
       if (!loginForm.username?.trim() || !loginForm.password?.trim()) {
@@ -248,24 +295,36 @@ function App() {
         return;
       }
       
-      const user = authService.login(loginForm.username, loginForm.password);
-      setCurrentUser(user);
-      setShowLoginModal(false);
-      setLoginForm({ username: '', password: '' });
-      setStatus('Login successful - Ready to begin');
-      loadPatientsFromLocalStorage();
-      loadTrainingData();
+      // Use the async login method from authService
+      const result = await authService.login(loginForm.username.trim(), loginForm.password);
+      
+      if (result.success) {
+        const user = result.user;
+        debugLog('Login successful', { username: user.username, role: user.role });
+        
+        setCurrentUser(user);
+        setShowLoginModal(false);
+        setLoginForm({ username: '', password: '' });
+        setStatus('Login successful - Ready to begin');
+        
+        // Load user data after successful login
+        await loadPatientsFromStorage();
+        loadTrainingData();
+      } else {
+        setLoginError(result.error || 'Login failed. Please try again.');
+      }
     } catch (error) {
       console.error('Login error:', error);
-      setLoginError(error.message || 'Login failed. Please try again.');
+      setLoginError(error.message || 'Login failed. Please check your connection and try again.');
     }
-  }, [loginForm, loadPatientsFromLocalStorage, loadTrainingData]);
+  }, [loginForm, loadPatientsFromStorage, loadTrainingData, debugLog]);
 
   const handleLogout = useCallback(() => {
     try {
+      debugLog('Logging out...');
       cleanupSpeechRecognizer();
       
-      if (authService && typeof authService.logout === 'function') {
+      if (authService) {
         authService.logout();
       }
       
@@ -282,15 +341,18 @@ function App() {
       setStatus('Please log in to continue');
       setShowLoginModal(true);
       setActiveTab('scribe');
+      
+      debugLog('Logout complete');
     } catch (error) {
       console.error('Logout error:', error);
       setCurrentUser(null);
       setShowLoginModal(true);
     }
-  }, []);
+  }, [debugLog]);
 
-  const handleCreateUser = useCallback((e) => {
+  const handleCreateUser = useCallback(async (e) => {
     e.preventDefault();
+    debugLog('Creating user', { username: newUser.username, role: newUser.role });
     
     try {
       if (!newUser.username?.trim() || !newUser.password?.trim() || !newUser.name?.trim()) {
@@ -303,59 +365,136 @@ function App() {
         return;
       }
 
-      if (newUser.password.length < 8) {
-        alert('Password must be at least 8 characters long');
+      if (newUser.password.length < 6) {
+        alert('Password must be at least 6 characters long');
         return;
       }
 
-      const result = authService.createUser(newUser);
-      setShowCreateUserModal(false);
-      setNewUser(DEFAULT_USER_DATA);
-      alert(result.message || 'User creation request logged');
+      // Call backend API to create user
+      const response = await axios.post(
+        `${apiBaseUrl}/users`,
+        {
+          username: newUser.username.trim(),
+          password: newUser.password,
+          name: newUser.name.trim(),
+          email: newUser.email?.trim() || '',
+          role: newUser.role || 'staff'
+        },
+        {
+          headers: authService.getAuthHeaders(),
+          timeout: 10000
+        }
+      );
+
+      if (response.data) {
+        setShowCreateUserModal(false);
+        setNewUser(DEFAULT_USER_DATA);
+        alert('User created successfully');
+      }
     } catch (error) {
       console.error('Create user error:', error);
-      alert('Failed to create user: ' + (error.message || 'Unknown error'));
+      if (error.response?.status === 403) {
+        alert('You do not have permission to create users');
+      } else if (error.response?.status === 400) {
+        alert(error.response.data?.error || 'Invalid user data');
+      } else {
+        alert('Failed to create user: ' + (error.message || 'Unknown error'));
+      }
     }
-  }, [newUser]);
+  }, [newUser, apiBaseUrl, debugLog]);
 
   // =============== PATIENT MANAGEMENT ===============
 
   const addPatient = useCallback(async () => {
     try {
+      debugLog('Adding patient', newPatientData);
+      
       if (!authService?.hasPermission('add_patients')) {
         alert('You do not have permission to add patients');
         return;
       }
 
       if (!newPatientData.firstName?.trim() || !newPatientData.lastName?.trim() || !newPatientData.dateOfBirth?.trim()) {
-        alert('Please fill in all required fields');
+        alert('Please fill in all required fields (First Name, Last Name, Date of Birth)');
         return;
       }
 
       const patient = {
         ...newPatientData,
+        id: Date.now().toString(),
         firstName: newPatientData.firstName.trim(),
-        lastName: newPatientData.lastName.trim()
+        lastName: newPatientData.lastName.trim(),
+        createdBy: currentUser?.name || currentUser?.username || 'Unknown',
+        createdAt: new Date().toISOString()
       };
 
-      await apiService.createPatient(patient);
-      await loadPatientsFromLocalStorage();
+      // Try to save to backend
+      try {
+        const response = await axios.post(
+          `${apiBaseUrl}/patients`,
+          patient,
+          {
+            headers: authService.getAuthHeaders(),
+            timeout: 5000
+          }
+        );
+        
+        if (response.data) {
+          patient.id = response.data.id || patient.id;
+        }
+      } catch (apiError) {
+        debugLog('Failed to save patient to API, saving locally', apiError.message);
+      }
+
+      // Save to localStorage as backup
+      const updatedPatients = [...patients, patient];
+      setPatients(updatedPatients);
+      localStorage.setItem('patients', JSON.stringify(updatedPatients));
       
       setNewPatientData(DEFAULT_PATIENT_DATA);
       setShowPatientModal(false);
       setStatus('Patient added successfully');
+      
+      debugLog('Patient added', { id: patient.id, name: `${patient.firstName} ${patient.lastName}` });
     } catch (error) {
       console.error('Error adding patient:', error);
       alert('Failed to save patient: ' + error.message);
     }
-  }, [newPatientData, loadPatientsFromLocalStorage]);
+  }, [newPatientData, patients, currentUser, apiBaseUrl, debugLog]);
 
   const updatePatient = useCallback(async () => {
     try {
       if (!selectedPatient) return;
+      
+      debugLog('Updating patient', { id: selectedPatient.id });
 
-      await apiService.updatePatient(selectedPatient.id, newPatientData);
-      await loadPatientsFromLocalStorage();
+      const updatedPatient = {
+        ...selectedPatient,
+        ...newPatientData,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser?.name || currentUser?.username || 'Unknown'
+      };
+
+      // Try to update in backend
+      try {
+        await axios.put(
+          `${apiBaseUrl}/patients/${selectedPatient.id}`,
+          updatedPatient,
+          {
+            headers: authService.getAuthHeaders(),
+            timeout: 5000
+          }
+        );
+      } catch (apiError) {
+        debugLog('Failed to update patient in API, updating locally', apiError.message);
+      }
+
+      // Update in localStorage
+      const updatedPatients = patients.map(p => 
+        p.id === selectedPatient.id ? updatedPatient : p
+      );
+      setPatients(updatedPatients);
+      localStorage.setItem('patients', JSON.stringify(updatedPatients));
       
       setIsEditingPatient(false);
       setShowPatientFullView(false);
@@ -364,12 +503,14 @@ function App() {
       console.error('Error updating patient:', error);
       alert('Failed to update patient: ' + error.message);
     }
-  }, [selectedPatient, newPatientData, loadPatientsFromLocalStorage]);
+  }, [selectedPatient, newPatientData, patients, currentUser, apiBaseUrl, debugLog]);
 
   // =============== SPEECH RECOGNITION ===============
 
   const cleanupSpeechRecognizer = useCallback(() => {
     try {
+      debugLog('Cleaning up speech recognizer...');
+      
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
         silenceTimeoutRef.current = null;
@@ -380,200 +521,328 @@ function App() {
         recordingTimerRef.current = null;
       }
       
-      // Use the speech service cleanup
-      speechService.cleanup();
+      if (recognizerRef.current) {
+        try {
+          recognizerRef.current.close();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        recognizerRef.current = null;
+      }
+      
+      if (audioConfigRef.current) {
+        try {
+          audioConfigRef.current.close();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        audioConfigRef.current = null;
+      }
+      
+      debugLog('Speech recognizer cleanup complete');
     } catch (error) {
       console.error('Error during cleanup:', error);
     }
-  }, []);
+  }, [debugLog]);
+
+  // Helper function to get speech token from backend
+  const getSpeechToken = async () => {
+    try {
+      debugLog('Getting speech token from backend...');
+      
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      debugLog('Making request to speech-token endpoint', {
+        userId: currentUser.id,
+        userRole: currentUser.role,
+        userName: currentUser.name
+      });
+      
+      const response = await axios.get(`${apiBaseUrl}/speech-token`, {
+        headers: authService.getAuthHeaders(),
+        timeout: 15000
+      });
+      
+      debugLog('Token response received', {
+        status: response.status,
+        hasToken: !!response.data?.token,
+        region: response.data?.region
+      });
+      
+      if (!response.data || !response.data.token) {
+        throw new Error('Invalid token response from server');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get speech token:', error);
+      
+      if (error.response) {
+        debugLog('Server error response', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        if (error.response.status === 401) {
+          throw new Error('Please log in again to use speech services');
+        } else if (error.response.status === 403) {
+          throw new Error('You do not have permission to use the scribe feature');
+        } else if (error.response.status === 500) {
+          const details = error.response.data?.details || error.response.data?.error || 'Speech service configuration error';
+          throw new Error(details);
+        }
+      } else if (!navigator.onLine) {
+        throw new Error('No internet connection');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout - please check your connection');
+      }
+      
+      throw error;
+    }
+  };
 
   const startRecording = useCallback(async () => {
     try {
-      if (!authService?.hasPermission('scribe')) {
-        setStatus('You do not have permission to record');
-        return;
-      }
-
-      if (isRecording || isPaused) {
-        setStatus('Recording already in progress');
-        return;
-      }
-
-      setStatus('Requesting microphone access...');
+      debugLog('Starting recording process...');
       
-      // Request microphone permission
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-      } catch (permError) {
-        console.error('Microphone permission error:', permError);
-        setStatus('Microphone permission denied. Please allow microphone access and try again.');
+      // Check user permissions
+      if (!authService?.hasPermission('scribe')) {
+        debugLog('Permission denied for scribe feature');
+        setStatus('You do not have permission to use the scribe feature');
+        return;
+      }
+      
+      // Check if already recording
+      if (isRecording || isPaused) {
+        debugLog('Already recording or paused');
+        setStatus('Recording already in progress');
         return;
       }
       
       setStatus('Initializing speech service...');
       
-      // Use the speech service to start recording
-      await speechService.startRecognition({
-        onRecognizing: (s, e) => {
-          try {
-            if (e.result?.text) {
-              setInterimTranscript(e.result.text);
-              if (silenceTimeoutRef.current) {
-                clearTimeout(silenceTimeoutRef.current);
-              }
-            }
-          } catch (error) {
-            console.error('Error in recognizing event:', error);
+      // Step 1: Request microphone permission
+      debugLog('Requesting microphone permission...');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        debugLog('Microphone permission granted');
+      } catch (permError) {
+        console.error('Microphone permission denied:', permError);
+        setStatus('❌ Microphone permission denied. Please allow microphone access and try again.');
+        
+        // Show browser-specific instructions
+        if (navigator.userAgent.includes('Chrome')) {
+          alert('To enable microphone:\n1. Click the lock icon in the address bar\n2. Set Microphone to "Allow"\n3. Refresh the page');
+        } else if (navigator.userAgent.includes('Firefox')) {
+          alert('To enable microphone:\n1. Click the lock icon in the address bar\n2. Click "More Information"\n3. Go to Permissions tab\n4. Set Microphone to "Allow"');
+        }
+        return;
+      }
+      
+      // Step 2: Get speech token from backend
+      debugLog('Getting speech token...');
+      let tokenData;
+      try {
+        tokenData = await getSpeechToken();
+        debugLog('Got token for region:', tokenData.region);
+      } catch (tokenError) {
+        console.error('Token error:', tokenError);
+        setStatus(`❌ ${tokenError.message}`);
+        return;
+      }
+      
+      // Step 3: Initialize Speech SDK with token
+      debugLog('Initializing Speech SDK...');
+      try {
+        // Create speech config using token (not subscription key)
+        const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(
+          tokenData.token,
+          tokenData.region
+        );
+        
+        // Configure speech recognition settings
+        speechConfig.speechRecognitionLanguage = 'en-US';
+        speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
+        speechConfig.enableDictation();
+        
+        // Configure audio input
+        audioConfigRef.current = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+        
+        // Create recognizer
+        recognizerRef.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfigRef.current);
+        
+        debugLog('Speech recognizer created');
+        
+        // Set up recognition event handlers
+        recognizerRef.current.recognizing = (s, e) => {
+          if (e.result.text) {
+            debugLog('Interim:', e.result.text);
+            setInterimTranscript(e.result.text);
           }
-        },
+        };
         
-        onRecognized: (s, e) => {
-          try {
-            if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
-              setTranscript(prev => {
-                const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
-                return newText;
-              });
-              setInterimTranscript('');
-              
-              if (silenceTimeoutRef.current) {
-                clearTimeout(silenceTimeoutRef.current);
-              }
-            }
-          } catch (error) {
-            console.error('Error in recognized event:', error);
+        recognizerRef.current.recognized = (s, e) => {
+          if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text.trim()) {
+            debugLog('Final:', e.result.text);
+            setTranscript(prev => {
+              const newTranscript = prev + (prev ? ' ' : '') + e.result.text.trim();
+              // Save to localStorage for recovery
+              localStorage.setItem('currentTranscript', JSON.stringify({
+                text: newTranscript,
+                timestamp: new Date().toISOString(),
+                patientId: selectedPatient?.id || null
+              }));
+              return newTranscript;
+            });
+            setInterimTranscript('');
+          } else if (e.result.reason === SpeechSDK.ResultReason.NoMatch) {
+            debugLog('No speech detected');
           }
-        },
+        };
         
-        onSessionStarted: (s, e) => {
-          console.log('Recording session started');
-          setStatus('Recording... Speak now');
-        },
+        recognizerRef.current.sessionStarted = (s, e) => {
+          debugLog('Session started');
+          setStatus('🔴 Recording... Speak clearly');
+        };
         
-        onSessionStopped: (s, e) => {
-          console.log('Recording session stopped');
+        recognizerRef.current.sessionStopped = (s, e) => {
+          debugLog('Session stopped');
           setIsRecording(false);
           setIsPaused(false);
-          setStatus('Recording session ended');
-        },
+          setStatus('✅ Recording session ended');
+        };
         
-        onCanceled: (s, e) => {
-          try {
-            console.error('Recognition canceled:', e.reason, e.errorDetails);
-            setIsRecording(false);
-            setIsPaused(false);
+        recognizerRef.current.canceled = (s, e) => {
+          console.error('Recognition canceled:', e.reason);
+          setIsRecording(false);
+          setIsPaused(false);
+          
+          if (e.reason === SpeechSDK.CancellationReason.Error) {
+            debugLog('Error details:', e.errorDetails);
             
-            if (e.reason === SpeechSDK.CancellationReason.Error) {
-              if (e.errorCode === SpeechSDK.CancellationErrorCode.ConnectionFailure) {
-                setStatus('Connection failed. Check your internet connection.');
-              } else if (e.errorCode === SpeechSDK.CancellationErrorCode.AuthenticationFailure) {
-                setStatus('Authentication failed. Please try logging in again.');
-              } else {
-                setStatus(`Recognition error: ${e.errorDetails}`);
-              }
+            if (e.errorDetails.includes('1006')) {
+              setStatus('❌ Invalid speech token. Please try again.');
+            } else if (e.errorDetails.includes('1007')) {
+              setStatus('❌ Speech service error. Please contact administrator.');
+            } else if (e.errorDetails.includes('microphone')) {
+              setStatus('❌ Microphone error. Please check your microphone.');
+            } else {
+              setStatus(`❌ Recognition error: ${e.errorDetails}`);
             }
-            cleanupSpeechRecognizer();
-          } catch (error) {
-            console.error('Error in canceled event:', error);
+          } else if (e.reason === SpeechSDK.CancellationReason.EndOfStream) {
+            setStatus('✅ Recording complete');
           }
-        }
-      });
-      
-      setIsRecording(true);
-      setIsPaused(false);
-      setRecordingDuration(0);
-      setStatus('Recording... Speak now');
+        };
+        
+        // Start continuous recognition
+        debugLog('Starting continuous recognition...');
+        await new Promise((resolve, reject) => {
+          recognizerRef.current.startContinuousRecognitionAsync(
+            () => {
+              debugLog('Recognition started successfully');
+              setIsRecording(true);
+              setIsPaused(false);
+              setStatus('🔴 Recording... Speak clearly');
+              setRecordingStartTime(Date.now());
+              setRecordingDuration(0);
+              resolve();
+            },
+            (error) => {
+              console.error('Failed to start recognition:', error);
+              reject(new Error(`Failed to start recording: ${error}`));
+            }
+          );
+        });
+        
+      } catch (sdkError) {
+        console.error('SDK initialization error:', sdkError);
+        setStatus(`❌ Failed to initialize speech service: ${sdkError.message}`);
+        cleanupSpeechRecognizer();
+      }
       
     } catch (error) {
-      console.error('Start recording error:', error);
-      setStatus(`Recording failed: ${error.message}`);
+      console.error('Unexpected error:', error);
+      setStatus(`❌ Recording failed: ${error.message}`);
       setIsRecording(false);
       setIsPaused(false);
       cleanupSpeechRecognizer();
     }
-  }, [isRecording, isPaused, cleanupSpeechRecognizer]);
+  }, [isRecording, isPaused, selectedPatient, apiBaseUrl, cleanupSpeechRecognizer, debugLog]);
 
-  const pauseRecording = useCallback(async () => {
-    try {
-      if (isRecording && !isPaused) {
-        await speechService.pauseRecognition();
-        setIsPaused(true);
-        setInterimTranscript('');
-        setStatus('Recording paused');
-        console.log('Recording paused successfully');
-      }
-    } catch (error) {
-      console.error('Pause recording error:', error);
-      setStatus('Error pausing recording');
+  const pauseRecording = useCallback(() => {
+    if (recognizerRef.current && isRecording && !isPaused) {
+      debugLog('Pausing recording...');
+      recognizerRef.current.stopContinuousRecognitionAsync(
+        () => {
+          setIsPaused(true);
+          setStatus('⏸️ Recording paused');
+          debugLog('Recording paused successfully');
+        },
+        (error) => {
+          console.error('Pause error:', error);
+          setStatus('❌ Failed to pause recording');
+        }
+      );
     }
-  }, [isRecording, isPaused]);
+  }, [isRecording, isPaused, debugLog]);
 
   const resumeRecording = useCallback(async () => {
-    try {
-      if (!isPaused) return;
-      
-      setStatus('Resuming recording...');
-      
-      await speechService.resumeRecognition({
-        onRecognizing: (s, e) => {
-          try {
-            if (e.result?.text) {
-              setInterimTranscript(e.result.text);
-            }
-          } catch (error) {
-            console.error('Error in recognizing event (resume):', error);
-          }
+    if (recognizerRef.current && isRecording && isPaused) {
+      debugLog('Resuming recording...');
+      recognizerRef.current.startContinuousRecognitionAsync(
+        () => {
+          setIsPaused(false);
+          setStatus('🔴 Recording resumed... Speak clearly');
+          debugLog('Recording resumed successfully');
         },
-        
-        onRecognized: (s, e) => {
-          try {
-            if (e.result?.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text?.trim()) {
-              setTranscript(prev => {
-                const newText = prev ? prev + ' ' + e.result.text.trim() : e.result.text.trim();
-                return newText;
-              });
-              setInterimTranscript('');
-            }
-          } catch (error) {
-            console.error('Error in recognized event (resume):', error);
-          }
+        (error) => {
+          console.error('Resume error:', error);
+          setStatus('❌ Failed to resume recording');
         }
-      });
-      
-      setIsPaused(false);
-      setIsRecording(true);
-      setStatus('Recording resumed... Speak now');
-      console.log('Recording resumed successfully');
-      
-    } catch (error) {
-      console.error('Resume recording error:', error);
-      setStatus('Error resuming recording');
+      );
     }
-  }, [isPaused]);
+  }, [isRecording, isPaused, debugLog]);
 
-  const stopRecording = useCallback(async () => {
-    try {
-      await speechService.stopRecognition();
-      cleanupSpeechRecognizer();
-      
+  const stopRecording = useCallback(() => {
+    debugLog('Stopping recording...');
+    
+    if (recognizerRef.current) {
+      recognizerRef.current.stopContinuousRecognitionAsync(
+        () => {
+          debugLog('Recording stopped successfully');
+          setIsRecording(false);
+          setIsPaused(false);
+          setInterimTranscript('');
+          setRecordingDuration(0);
+          setStatus('✅ Recording complete');
+          cleanupSpeechRecognizer();
+        },
+        (error) => {
+          console.error('Stop error:', error);
+          setIsRecording(false);
+          setIsPaused(false);
+          setInterimTranscript('');
+          setRecordingDuration(0);
+          setStatus('⚠️ Recording stopped with error');
+          cleanupSpeechRecognizer();
+        }
+      );
+    } else {
       setIsRecording(false);
       setIsPaused(false);
       setInterimTranscript('');
       setRecordingDuration(0);
-      setStatus('Recording complete');
-      
-    } catch (error) {
-      console.error('Stop recording error:', error);
-      setIsRecording(false);
-      setIsPaused(false);
-      setInterimTranscript('');
-      setRecordingDuration(0);
-      setStatus('Recording stopped');
+      setStatus('✅ Recording complete');
     }
-  }, [cleanupSpeechRecognizer]);
+  }, [cleanupSpeechRecognizer, debugLog]);
 
   const toggleRecording = useCallback(async () => {
+    debugLog('Toggle recording called', { isRecording, isPaused });
+    
     if (!isRecording && !isPaused) {
       await startRecording();
     } else if (isRecording && !isPaused) {
@@ -581,8 +850,8 @@ function App() {
     } else if (isPaused) {
       await resumeRecording();
     }
-  }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording]);
-  
+  }, [isRecording, isPaused, startRecording, pauseRecording, resumeRecording, debugLog]);
+
   // =============== AI GENERATION ===============
 
   const generateSpecialtyPrompt = useCallback(() => {
@@ -634,80 +903,97 @@ INSTRUCTIONS: Convert the transcript into professional medical documentation.`;
   }, [trainingData]);
 
   const generateNotes = useCallback(async () => {
-  try {
-    if (!authService?.hasPermission('scribe')) {
-      setStatus('You do not have permission to generate notes');
-      return;
-    }
+    try {
+      debugLog('Generating notes...');
+      
+      if (!authService?.hasPermission('scribe')) {
+        setStatus('You do not have permission to generate notes');
+        return;
+      }
 
-    if (!transcript?.trim()) {
-      setStatus('No transcript available. Please record first.');
-      return;
-    }
+      if (!transcript?.trim()) {
+        setStatus('No transcript available. Please record first.');
+        return;
+      }
 
-    setIsProcessing(true);
-    setStatus('AI generating medical notes...');
+      setIsProcessing(true);
+      setStatus('AI generating medical notes...');
 
-    let patientContext = '';
-    if (selectedPatient) {
-      patientContext = `
+      let patientContext = '';
+      if (selectedPatient) {
+        const age = calculateAge(selectedPatient.dateOfBirth);
+        patientContext = `
 PATIENT CONTEXT:
 Name: ${selectedPatient.firstName || ''} ${selectedPatient.lastName || ''}
+Age: ${age || 'Unknown'}
 DOB: ${selectedPatient.dateOfBirth || 'Not specified'}
 Gender: ${selectedPatient.gender || 'Not specified'}
 Allergies: ${selectedPatient.allergies || 'NKDA'}
 Medical History: ${selectedPatient.medicalHistory || 'No significant medical history recorded'}
 Current Medications: ${selectedPatient.medications || 'No current medications recorded'}`;
-    } else {
-      patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
-    }
-
-    const systemPrompt = generateSpecialtyPrompt();
-
-    // Call YOUR backend API instead of OpenAI directly
-    const response = await axios.post(
-      'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api/generate-notes',
-      {
-        transcript: transcript,
-        patientContext: patientContext,
-        systemPrompt: systemPrompt
-      },
-      {
-        timeout: 30000
+      } else {
+        patientContext = 'PATIENT CONTEXT: No patient selected - generating general medical notes from transcript.';
       }
-    );
 
-    if (!response.data?.notes) {
-      throw new Error('Invalid response from API');
-    }
+      const systemPrompt = generateSpecialtyPrompt();
 
-    const cleanedNotes = cleanMarkdownFormatting(response.data.notes);
-    
-    setMedicalNotes(cleanedNotes);
-    setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
-    
-  } catch (error) {
-    console.error('AI generation error:', error);
-    let errorMessage = 'Failed to generate notes: ';
-    
-    if (error.code === 'ECONNABORTED') {
-      errorMessage = 'Request timed out. Please try again.';
-    } else if (error.response?.status === 401) {
-      errorMessage = 'Authentication failed.';
-    } else if (error.message) {
-      errorMessage += error.message;
-    } else {
-      errorMessage += 'Unknown error occurred';
+      debugLog('Calling generate-notes API...');
+      
+      const response = await axios.post(
+        `${apiBaseUrl}/generate-notes`,
+        {
+          transcript: transcript,
+          patientContext: patientContext,
+          systemPrompt: systemPrompt,
+          specialty: trainingData.specialty,
+          noteType: trainingData.noteType
+        },
+        {
+          headers: authService.getAuthHeaders(),
+          timeout: 30000
+        }
+      );
+
+      if (!response.data?.notes) {
+        throw new Error('Invalid response from API');
+      }
+
+      const cleanedNotes = cleanMarkdownFormatting(response.data.notes);
+      
+      setMedicalNotes(cleanedNotes);
+      setStatus(selectedPatient ? 'Medical notes generated successfully' : 'Medical notes generated - Select patient to save');
+      
+      debugLog('Notes generated successfully');
+    } catch (error) {
+      console.error('AI generation error:', error);
+      let errorMessage = 'Failed to generate notes: ';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to generate notes.';
+      } else if (error.response?.status === 500) {
+        errorMessage = error.response.data?.error || 'Server error. Please try again.';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection.';
+      } else if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Unknown error occurred';
+      }
+      
+      setStatus(errorMessage);
+    } finally {
+      setIsProcessing(false);
     }
-    
-    setStatus(errorMessage);
-  } finally {
-    setIsProcessing(false);
-  }
-}, [transcript, selectedPatient, trainingData, generateSpecialtyPrompt]);
+  }, [transcript, selectedPatient, trainingData, generateSpecialtyPrompt, apiBaseUrl, debugLog]);
 
   const saveVisit = useCallback(async () => {
     try {
+      debugLog('Saving visit...');
+      
       if (!medicalNotes?.trim()) {
         setStatus('Cannot save - no notes generated');
         return;
@@ -724,28 +1010,58 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
       }
 
       const visit = {
+        id: Date.now().toString(),
         date: new Date().toLocaleDateString(),
         time: new Date().toLocaleTimeString(),
         transcript: transcript || '',
         notes: medicalNotes,
         specialty: trainingData.specialty,
         noteType: trainingData.noteType,
-        createdBy: currentUser?.name || 'Unknown'
+        createdBy: currentUser?.name || currentUser?.username || 'Unknown',
+        createdAt: new Date().toISOString()
       };
 
-      await apiService.createVisit(selectedPatient.id, visit);
-      await loadPatientsFromLocalStorage();
+      // Update patient with new visit
+      const updatedPatient = {
+        ...selectedPatient,
+        visits: [...(selectedPatient.visits || []), visit]
+      };
+
+      // Try to save to backend
+      try {
+        await axios.post(
+          `${apiBaseUrl}/patients/${selectedPatient.id}/visits`,
+          visit,
+          {
+            headers: authService.getAuthHeaders(),
+            timeout: 5000
+          }
+        );
+      } catch (apiError) {
+        debugLog('Failed to save visit to API, saving locally', apiError.message);
+      }
+
+      // Update local storage
+      const updatedPatients = patients.map(p => 
+        p.id === selectedPatient.id ? updatedPatient : p
+      );
+      setPatients(updatedPatients);
+      localStorage.setItem('patients', JSON.stringify(updatedPatients));
+      setSelectedPatient(updatedPatient);
       
       // Clear the session after saving
       setTranscript('');
       setInterimTranscript('');
       setMedicalNotes('');
-      setStatus('Visit saved - Ready for next patient');
+      localStorage.removeItem('currentTranscript');
+      setStatus('Visit saved successfully - Ready for next patient');
+      
+      debugLog('Visit saved', { patientId: selectedPatient.id, visitId: visit.id });
     } catch (error) {
       console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + (error.message || 'Unknown error'));
     }
-  }, [medicalNotes, selectedPatient, transcript, loadPatientsFromLocalStorage, trainingData, currentUser]);
+  }, [medicalNotes, selectedPatient, transcript, patients, trainingData, currentUser, apiBaseUrl, debugLog]);
 
   // =============== TRAINING HANDLERS ===============
 
@@ -762,7 +1078,7 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
         specialty: trainingData.specialty,
         noteType: trainingData.noteType,
         dateAdded: new Date().toISOString(),
-        addedBy: currentUser?.name || 'Unknown'
+        addedBy: currentUser?.name || currentUser?.username || 'Unknown'
       };
 
       const updatedData = {
@@ -773,11 +1089,13 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
       saveTrainingData(updatedData);
       setUploadedNoteText('');
       alert('Baseline note added successfully!');
+      
+      debugLog('Baseline note added', { specialty: newNote.specialty, noteType: newNote.noteType });
     } catch (error) {
       console.error('Error adding baseline note:', error);
       alert('Failed to add baseline note. Please try again.');
     }
-  }, [uploadedNoteText, trainingData, currentUser, saveTrainingData]);
+  }, [uploadedNoteText, trainingData, currentUser, saveTrainingData, debugLog]);
 
   const removeBaselineNote = useCallback((noteId) => {
     try {
@@ -786,15 +1104,16 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
         baselineNotes: (trainingData.baselineNotes || []).filter(note => note.id !== noteId)
       };
       saveTrainingData(updatedData);
+      debugLog('Baseline note removed', { noteId });
     } catch (error) {
       console.error('Error removing baseline note:', error);
       alert('Failed to remove baseline note. Please try again.');
     }
-  }, [trainingData, saveTrainingData]);
+  }, [trainingData, saveTrainingData, debugLog]);
 
   // =============== SETTINGS HANDLERS ===============
 
-  const saveApiSettings = useCallback(async (settings) => {
+  const saveApiSettings = useCallback((settings) => {
     try {
       const validatedSettings = {
         speechKey: settings.speechKey || '',
@@ -806,18 +1125,20 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
       };
       
       setApiSettings(validatedSettings);
-      await apiService.saveApiSettings(validatedSettings);
+      localStorage.setItem('apiSettings', JSON.stringify(validatedSettings));
       
       if (validatedSettings.speechKey && validatedSettings.openaiKey) {
         setStatus('API settings saved - Ready to begin');
       } else {
         setStatus('API settings saved - Please configure all required keys');
       }
+      
+      debugLog('API settings saved');
     } catch (error) {
       console.error('Error saving API settings:', error);
       setStatus('Failed to save API settings: ' + error.message);
     }
-  }, []);
+  }, [debugLog]);
 
   // =============== MODAL HANDLERS ===============
 
@@ -930,7 +1251,7 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
                 />
               )}
               
-              {activeTab === 'training' && (
+              {activeTab === 'training' && authService.hasPermission('training') && (
                 <TrainingPage
                   trainingData={trainingData}
                   uploadedNoteText={uploadedNoteText}
@@ -957,7 +1278,7 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
                 />
               )}
               
-              {activeTab === 'settings' && (
+              {activeTab === 'settings' && authService.hasPermission('manage_settings') && (
                 <SettingsPage
                   apiSettings={apiSettings}
                   setApiSettings={setApiSettings}
@@ -967,7 +1288,7 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
                 />
               )}
               
-              {activeTab === 'users' && (
+              {activeTab === 'users' && authService.hasPermission('manage_users') && (
                 <UsersPage
                   onCreateUser={() => setShowCreateUserModal(true)}
                 />
