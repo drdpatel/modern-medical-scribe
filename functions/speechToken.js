@@ -1,5 +1,6 @@
 // functions/speechToken.js
 // Azure Function for secure speech token generation with role-based access
+// FIXED: Using correct environment variable names
 
 const { app } = require('@azure/functions');
 const axios = require('axios');
@@ -43,13 +44,15 @@ function hasPermission(userRole, permission) {
   return permissions[userRole]?.includes(permission) || false;
 }
 
-// Validate environment variables
+// Validate environment variables - FIXED VARIABLE NAMES
 function validateConfig() {
-  const speechKey = process.env.AZURE_SPEECH_KEY;
-  const speechRegion = process.env.AZURE_SPEECH_REGION;
+  // FIXED: Using SPEECH_KEY and SPEECH_REGION (not AZURE_SPEECH_KEY)
+  const speechKey = process.env.SPEECH_KEY;
+  const speechRegion = process.env.SPEECH_REGION;
   
   if (!speechKey || !speechRegion) {
-    console.error('Missing Azure Speech configuration');
+    console.error('Missing Azure Speech configuration - checking for variables SPEECH_KEY and SPEECH_REGION');
+    console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('SPEECH')));
     return null;
   }
   
@@ -102,6 +105,7 @@ app.http('speech-token', {
       // Validate Azure Speech configuration
       const config = validateConfig();
       if (!config) {
+        console.error('Speech service configuration missing');
         return {
           status: 500,
           headers: {
@@ -109,12 +113,13 @@ app.http('speech-token', {
           },
           jsonBody: { 
             error: 'Speech service not configured',
-            details: 'Please contact your administrator'
+            details: 'Please contact your administrator to configure SPEECH_KEY and SPEECH_REGION'
           }
         };
       }
       
       const { speechKey, speechRegion } = config;
+      console.log(`Using speech region: ${speechRegion}`);
       
       // Check if we have a valid cached token
       if (tokenCache.token && 
@@ -166,7 +171,7 @@ app.http('speech-token', {
             },
             jsonBody: { 
               error: 'Failed to initialize speech service',
-              details: 'Unable to obtain speech token'
+              details: 'Unable to obtain speech token from Azure'
             }
           };
         }
@@ -179,7 +184,7 @@ app.http('speech-token', {
         };
         
         // Log successful token generation
-        console.log(`Speech token issued for user: ${userId} (role: ${userRole})`);
+        console.log(`Speech token issued successfully for user: ${userId} (role: ${userRole})`);
         
         return {
           status: 200,
@@ -199,7 +204,8 @@ app.http('speech-token', {
         if (tokenError.response) {
           console.error('Azure API error:', {
             status: tokenError.response.status,
-            data: tokenError.response.data
+            data: tokenError.response.data,
+            headers: tokenError.response.headers
           });
           
           if (tokenError.response.status === 401) {
@@ -210,7 +216,7 @@ app.http('speech-token', {
               },
               jsonBody: { 
                 error: 'Invalid speech service configuration',
-                details: 'Please contact your administrator'
+                details: 'SPEECH_KEY is invalid or expired. Please check Azure configuration.'
               }
             };
           } else if (tokenError.response.status === 429) {
@@ -249,7 +255,7 @@ app.http('speech-token', {
           },
           jsonBody: { 
             error: 'Failed to initialize speech service',
-            details: process.env.NODE_ENV === 'development' ? tokenError.message : 'Internal error'
+            details: process.env.NODE_ENV === 'development' ? tokenError.message : 'Internal error occurred'
           }
         };
       }
@@ -285,7 +291,7 @@ app.http('speech-health', {
           status: 503,
           jsonBody: {
             status: 'unhealthy',
-            error: 'Speech service not configured'
+            error: 'Speech service not configured (missing SPEECH_KEY or SPEECH_REGION)'
           }
         };
       }
@@ -313,7 +319,8 @@ app.http('speech-health', {
             jsonBody: {
               status: 'healthy',
               region: speechRegion,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              cache: tokenCache.token ? 'active' : 'empty'
             }
           };
         }
