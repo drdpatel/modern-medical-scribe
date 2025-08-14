@@ -1,4 +1,53 @@
-// authService.js - FIXED VERSION with proper session management
+// Permission checking with validation
+  // REPLACE the hasPermission method in authService.js with this:
+  
+  hasPermission(permission) {
+    if (!this.currentUser) return false;
+    
+    const permissions = {
+      super_admin: [
+        'scribe', 
+        'add_patients', 
+        'edit_patients',
+        'delete_patients',
+        'add_users', 
+        'read_all_notes', 
+        'edit_all_notes', 
+        'manage_users', 
+        'view_all_patients', 
+        'export_data'
+      ],
+      admin: [
+        'scribe', 
+        'add_patients', 
+        'edit_patients',
+        'delete_patients',
+        'add_users', 
+        'read_all_notes', 
+        'edit_own_notes', 
+        'manage_users', 
+        'view_all_patients'
+      ],
+      medical_provider: [
+        'scribe', 
+        'add_patients',     // ADDED
+        'edit_patients',    // ADDED
+        'delete_patients',  // ADDED (optional - remove if you don't want this)
+        'read_own_notes', 
+        'edit_own_notes', 
+        'view_own_patients'
+      ],
+      support_staff: [
+        'add_patients', 
+        'edit_patients',    // ADDED
+        'read_all_notes', 
+        'view_all_patients'
+      ]
+    };
+    
+    const userPermissions = permissions[this.currentUser.role];
+    return userPermissions ? userPermissions.includes(permission) : false;
+  }// authService.js - FIXED VERSION with proper session management
 // Handles authentication, authorization, and session timeout
 
 class AuthService {
@@ -212,6 +261,9 @@ class AuthService {
   }
 
   // Permission checking with validation
+// Permission checking with validation
+  // REPLACE the hasPermission method in authService.js with this:
+  
   hasPermission(permission) {
     if (!this.currentUser) return false;
     
@@ -219,17 +271,20 @@ class AuthService {
       super_admin: [
         'scribe', 
         'add_patients', 
+        'edit_patients',
+        'delete_patients',
         'add_users', 
         'read_all_notes', 
         'edit_all_notes', 
         'manage_users', 
         'view_all_patients', 
-        'delete_patients', 
         'export_data'
       ],
       admin: [
         'scribe', 
         'add_patients', 
+        'edit_patients',
+        'delete_patients',
         'add_users', 
         'read_all_notes', 
         'edit_own_notes', 
@@ -238,12 +293,16 @@ class AuthService {
       ],
       medical_provider: [
         'scribe', 
+        'add_patients',     // ADDED
+        'edit_patients',    // ADDED
+        'delete_patients',  // ADDED (optional - remove if you don't want this)
         'read_own_notes', 
         'edit_own_notes', 
         'view_own_patients'
       ],
       support_staff: [
         'add_patients', 
+        'edit_patients',    // ADDED
         'read_all_notes', 
         'view_all_patients'
       ]
@@ -253,6 +312,7 @@ class AuthService {
     return userPermissions ? userPermissions.includes(permission) : false;
   }
 
+  
   // Check if user can edit specific notes
   canEditNotes(visitCreatedBy) {
     if (!this.currentUser) return false;
