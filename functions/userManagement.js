@@ -84,12 +84,47 @@ function validateUserData(userData) {
   return { valid: true };
 }
 
+// UPDATED Permission helper with patient management permissions
 function hasPermission(userRole, requiredPermission) {
   const permissions = {
-    super_admin: ['scribe', 'add_patients', 'add_users', 'read_all_notes', 'edit_all_notes', 'manage_users'],
-    admin: ['scribe', 'add_patients', 'add_users', 'read_own_notes', 'manage_users'],
-    medical_provider: ['scribe', 'read_own_notes'],
-    support_staff: ['add_patients', 'read_all_notes']
+    super_admin: [
+      'scribe', 
+      'add_patients', 
+      'edit_patients',
+      'delete_patients',
+      'add_users', 
+      'read_all_notes', 
+      'edit_all_notes', 
+      'manage_users',
+      'view_all_patients',
+      'export_data'
+    ],
+    admin: [
+      'scribe', 
+      'add_patients', 
+      'edit_patients',
+      'delete_patients',
+      'add_users', 
+      'read_all_notes', 
+      'edit_own_notes',
+      'manage_users',
+      'view_all_patients'
+    ],
+    medical_provider: [
+      'scribe', 
+      'add_patients',
+      'edit_patients',
+      'delete_patients',
+      'read_own_notes',
+      'edit_own_notes',
+      'view_own_patients'
+    ],
+    support_staff: [
+      'add_patients',
+      'edit_patients', 
+      'read_all_notes',
+      'view_all_patients'
+    ]
   };
   
   return permissions[userRole]?.includes(requiredPermission) || false;
@@ -297,6 +332,148 @@ app.http('createUser', {
       
     } catch (error) {
       console.error('Create user error:', error);
+      return {
+        status: 500,
+        jsonBody: { error: 'Internal server error' }
+      };
+    }
+  }
+});
+
+// PUT /api/users/:username - Update user (admin only)
+app.http('updateUser', {
+  methods: ['PUT'],
+  route: 'users/{username}',
+  handler: async (request, context) => {
+    try {
+      await ensureTableExists();
+      
+      // Check permissions
+      const userRole = request.headers.get('x-user-role');
+      
+      if (!hasPermission(userRole, 'manage_users')) {
+        return {
+          status: 403,
+          jsonBody: { error: 'Insufficient permissions' }
+        };
+      }
+      
+      const username = request.params.username;
+      const updateData = await request.json();
+      
+      // Get existing user
+      let existingUser;
+      try {
+        existingUser = await tableClient.getEntity('USER', username);
+      } catch (error) {
+        if (error.statusCode === 404) {
+          return {
+            status: 404,
+            jsonBody: { error: 'User not found' }
+          };
+        }
+        throw error;
+      }
+      
+      // Update fields
+      const updatedUser = {
+        partitionKey: 'USER',
+        rowKey: username,
+        ...existingUser
+      };
+      
+      if (updateData.name) updatedUser.name = updateData.name;
+      if (updateData.role) updatedUser.role = updateData.role;
+      if (updateData.isActive !== undefined) updatedUser.isActive = updateData.isActive;
+      
+      // Update password if provided
+      if (updateData.password) {
+        if (updateData.password.length < 8) {
+          return {
+            status: 400,
+            jsonBody: { error: 'Password must be at least 8 characters long' }
+          };
+        }
+        updatedUser.passwordHash = await bcrypt.hash(updateData.password, SALT_ROUNDS);
+      }
+      
+      updatedUser.updatedAt = new Date().toISOString();
+      
+      await tableClient.updateEntity(updatedUser, 'Replace');
+      
+      return {
+        status: 200,
+        jsonBody: {
+          success: true,
+          message: 'User updated successfully',
+          user: sanitizeUser(updatedUser)
+        }
+      };
+      
+    } catch (error) {
+      console.error('Update user error:', error);
+      return {
+        status: 500,
+        jsonBody: { error: 'Internal server error' }
+      };
+    }
+  }
+});
+
+// DELETE /api/users/:username - Delete user (super admin only)
+app.http('deleteUser', {
+  methods: ['DELETE'],
+  route: 'users/{username}',
+  handler: async (request, context) => {
+    try {
+      await ensureTableExists();
+      
+      // Check permissions - only super admin can delete users
+      const userRole = request.headers.get('x-user-role');
+      
+      if (userRole !== 'super_admin') {
+        return {
+          status: 403,
+          jsonBody: { error: 'Only super admin can delete users' }
+        };
+      }
+      
+      const username = request.params.username;
+      
+      // Prevent deleting the main admin account
+      if (username === 'darshan@aayuwell.com') {
+        return {
+          status: 400,
+          jsonBody: { error: 'Cannot delete the primary administrator account' }
+        };
+      }
+      
+      // Check if user exists
+      try {
+        await tableClient.getEntity('USER', username);
+      } catch (error) {
+        if (error.statusCode === 404) {
+          return {
+            status: 404,
+            jsonBody: { error: 'User not found' }
+          };
+        }
+        throw error;
+      }
+      
+      // Delete user
+      await tableClient.deleteEntity('USER', username);
+      
+      return {
+        status: 200,
+        jsonBody: {
+          success: true,
+          message: 'User deleted successfully'
+        }
+      };
+      
+    } catch (error) {
+      console.error('Delete user error:', error);
       return {
         status: 500,
         jsonBody: { error: 'Internal server error' }
