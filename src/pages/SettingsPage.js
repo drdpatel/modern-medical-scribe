@@ -1,12 +1,6 @@
 import React from 'react';
 
-const SettingsPage = ({ 
-  apiSettings, 
-  setApiSettings, 
-  showApiKeys, 
-  setShowApiKeys, 
-  onSaveSettings 
-}) => {
+const SettingsPage = () => {
   return (
     <div className="content-container">
       <div className="page-header">
