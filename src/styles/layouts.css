@@ -110,6 +110,15 @@
   align-items: center;
 }
 
+/* Recording Controls - Horizontal layout */
+.recording-controls-horizontal {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Status Bar */
 .status-bar {
   padding: 12px 16px;
@@ -174,6 +183,19 @@
   position: relative;
 }
 
+.patient-search-container .form-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  transition: all var(--transition-base);
+}
+
+.patient-search-container .form-input:focus {
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px rgba(186, 230, 55, 0.1);
+}
+
 /* Search Results */
 .search-results {
   padding: 8px 16px;
@@ -185,7 +207,7 @@
   font-weight: 500;
 }
 
-/* Patient Management */
+/* Patient Management - UPDATED SECTION */
 .patient-list {
   display: flex;
   flex-direction: column;
@@ -202,11 +224,20 @@
 
 .patient-info-compact {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .patient-info-compact .patient-name-clickable {
   font-size: 15px;
   margin-bottom: 2px;
+  display: inline-block;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .patient-name {
@@ -216,6 +247,7 @@
   margin-bottom: 2px;
 }
 
+/* FIXED: Patient name clickable with better hover color */
 .patient-name-clickable {
   font-weight: 600;
   font-size: 16px;
@@ -226,8 +258,9 @@
 }
 
 .patient-name-clickable:hover {
-  color: var(--primary-green);
+  color: var(--accent-purple);  /* Changed from green to purple for visibility */
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .patient-id,
@@ -250,9 +283,35 @@
 }
 
 .patient-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gray-dark);
-  margin-top: 2px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* IMPROVED: Clear button for patient selection */
+.btn-icon {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-icon:hover {
+  background: rgba(239, 68, 68, 0.15);
+  transform: scale(1.05);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 /* Empty State */
