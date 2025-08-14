@@ -100,6 +100,199 @@ function App() {
     }
   }, []);
 
+  // =============== CLEANUP FUNCTION - DEFINE EARLY ===============
+  const cleanupSpeechRecognizer = useCallback(() => {
+    try {
+      debugLog('Cleaning up speech recognizer...');
+      
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = null;
+      }
+      
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      
+      if (recognizerRef.current) {
+        try {
+          recognizerRef.current.close();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        recognizerRef.current = null;
+      }
+      
+      if (audioConfigRef.current) {
+        try {
+          audioConfigRef.current.close();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        audioConfigRef.current = null;
+      }
+      
+      debugLog('Speech recognizer cleanup complete');
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
+  }, [debugLog]);
+
+  // =============== DATA LOADING FUNCTIONS ===============
+  const loadPatientsFromLocalStorage = useCallback(() => {
+    try {
+      debugLog('Loading patients from localStorage...');
+      
+      const saved = localStorage.getItem('patients');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const patientsArray = Array.isArray(parsed) ? parsed : [];
+        setPatients(patientsArray);
+        debugLog(`Loaded ${patientsArray.length} patients from localStorage`);
+      } else {
+        setPatients([]);
+        debugLog('No patients found in localStorage');
+      }
+    } catch (error) {
+      console.error('Failed to load patients from localStorage:', error);
+      setPatients([]);
+    }
+  }, [debugLog]);
+
+  const loadTrainingData = useCallback(() => {
+    try {
+      const saved = localStorage.getItem('trainingData');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const validSpecialty = MEDICAL_SPECIALTIES[parsed.specialty] ? parsed.specialty : 'internal_medicine';
+        const validNoteType = MEDICAL_SPECIALTIES[validSpecialty].noteTypes[parsed.noteType] ? 
+          parsed.noteType : 'progress_note';
+        
+        setTrainingData({
+          specialty: validSpecialty,
+          noteType: validNoteType,
+          baselineNotes: Array.isArray(parsed.baselineNotes) ? parsed.baselineNotes.slice(-5) : [],
+          customTemplates: parsed.customTemplates || {}
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load training data:', error);
+      setTrainingData(DEFAULT_TRAINING_DATA);
+    }
+  }, []);
+
+  const saveTrainingData = useCallback((data) => {
+    try {
+      const sanitizedData = {
+        specialty: MEDICAL_SPECIALTIES[data.specialty] ? data.specialty : 'internal_medicine',
+        noteType: data.noteType || 'progress_note',
+        baselineNotes: Array.isArray(data.baselineNotes) ? data.baselineNotes.slice(-5) : [],
+        customTemplates: data.customTemplates || {}
+      };
+      
+      localStorage.setItem('trainingData', JSON.stringify(sanitizedData));
+      setTrainingData(sanitizedData);
+      debugLog('Training data saved', sanitizedData);
+    } catch (error) {
+      console.error('Failed to save training data:', error);
+      setStatus('Warning: Failed to save training data');
+    }
+  }, [debugLog]);
+
+  // =============== AUTHENTICATION FUNCTIONS ===============
+  const handleLogin = useCallback((e) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    try {
+      if (!loginForm.username || !loginForm.password) {
+        setLoginError('Please enter username and password');
+        return;
+      }
+      
+      // Simple synchronous login
+      const user = authService.login(loginForm.username, loginForm.password);
+      
+      if (user) {
+        console.log('Login successful:', user);
+        setCurrentUser(user);
+        setShowLoginModal(false);
+        setLoginForm({ username: '', password: '' });
+        setStatus('Login successful - Ready to begin');
+        loadPatientsFromLocalStorage();
+        loadTrainingData();
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError(error.message || 'Invalid credentials. Try: doctor/doctor123');
+    }
+  }, [loginForm, loadPatientsFromLocalStorage, loadTrainingData]);
+
+  const handleLogout = useCallback(() => {
+    debugLog('Logging out user');
+    
+    // Clean up speech recognizer
+    cleanupSpeechRecognizer();
+    
+    // Clear all state
+    setCurrentUser(null);
+    setSelectedPatient(null);
+    setTranscript('');
+    setInterimTranscript('');
+    setMedicalNotes('');
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordingDuration(0);
+    setActiveTab('scribe');
+    
+    // Clear auth
+    if (authService) {
+      authService.logout();
+    }
+    
+    // Show login modal
+    setShowLoginModal(true);
+    setStatus('Please log in to continue');
+  }, [cleanupSpeechRecognizer, debugLog]);
+
+  const handleCreateUser = useCallback((e) => {
+    e.preventDefault();
+    
+    try {
+      if (!authService?.hasPermission('add_users')) {
+        alert('You do not have permission to create users');
+        return;
+      }
+      
+      // Validate passwords match
+      if (newUser.password !== newUser.confirmPassword) {
+        alert('Passwords do not match');
+        return;
+      }
+      
+      // Validate required fields
+      if (!newUser.username || !newUser.password || !newUser.name || !newUser.role) {
+        alert('Please fill in all required fields');
+        return;
+      }
+      
+      // Create user (local for now)
+      const result = authService.createUser(newUser);
+      
+      if (result.success) {
+        alert('User created successfully (saved locally)');
+        setShowCreateUserModal(false);
+        setNewUser(DEFAULT_USER_DATA);
+      } else {
+        alert('Failed to create user: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      alert('Failed to create user: ' + error.message);
+    }
+  }, [newUser]);
+
   // =============== EFFECTS ===============
 
   // Recording duration timer
@@ -147,7 +340,7 @@ function App() {
         clearInterval(activityCheckRef.current);
       }
     };
-  }, [currentUser]);
+  }, [currentUser, handleLogout, debugLog]);
 
   // Initialize app
   useEffect(() => {
@@ -166,7 +359,7 @@ function App() {
           debugLog('User already authenticated', { username: user.username, role: user.role });
           setCurrentUser(user);
           setStatus('Ready to begin');
-          await loadPatientsFromStorage();
+          loadPatientsFromLocalStorage();
           loadTrainingData();
         } else {
           debugLog('No authenticated user, showing login');
@@ -206,113 +399,6 @@ function App() {
     };
   }, []);
 
-  // =============== DATA MANAGEMENT ===============
-
-  const loadTrainingData = useCallback(() => {
-    try {
-      const saved = localStorage.getItem('trainingData');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const validSpecialty = MEDICAL_SPECIALTIES[parsed.specialty] ? parsed.specialty : 'internal_medicine';
-        const validNoteType = MEDICAL_SPECIALTIES[validSpecialty].noteTypes[parsed.noteType] ? 
-          parsed.noteType : 'progress_note';
-        
-        setTrainingData({
-          specialty: validSpecialty,
-          noteType: validNoteType,
-          baselineNotes: Array.isArray(parsed.baselineNotes) ? parsed.baselineNotes.slice(-5) : [],
-          customTemplates: parsed.customTemplates || {}
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load training data:', error);
-      setTrainingData(DEFAULT_TRAINING_DATA);
-    }
-  }, []);
-
-  const saveTrainingData = useCallback((data) => {
-    try {
-      const sanitizedData = {
-        specialty: MEDICAL_SPECIALTIES[data.specialty] ? data.specialty : 'internal_medicine',
-        noteType: data.noteType || 'progress_note',
-        baselineNotes: Array.isArray(data.baselineNotes) ? data.baselineNotes.slice(-5) : [],
-        customTemplates: data.customTemplates || {}
-      };
-      
-      localStorage.setItem('trainingData', JSON.stringify(sanitizedData));
-      setTrainingData(sanitizedData);
-      debugLog('Training data saved', sanitizedData);
-    } catch (error) {
-      console.error('Failed to save training data:', error);
-      setStatus('Warning: Failed to save training data');
-    }
-  }, [debugLog]);
-
-  const loadPatientsFromStorage = useCallback(async () => {
-    try {
-      debugLog('Loading patients...');
-      
-      // Try to load from backend API first
-      if (currentUser) {
-        const response = await axios.get(`${apiBaseUrl}/patients`, {
-          headers: authService.getAuthHeaders(),
-          timeout: 5000
-        });
-        
-        if (response.data) {
-          setPatients(response.data);
-          debugLog(`Loaded ${response.data.length} patients from API`);
-          return;
-        }
-      }
-    } catch (error) {
-      debugLog('Failed to load patients from API, using localStorage', error.message);
-    }
-    
-    // Fallback to localStorage
-    try {
-      const saved = localStorage.getItem('patients');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setPatients(Array.isArray(parsed) ? parsed : []);
-      }
-    } catch (error) {
-      console.error('Failed to load patients from localStorage:', error);
-      setPatients([]);
-    }
-  }, [currentUser, apiBaseUrl, debugLog]);
-
-  // =============== AUTHENTICATION ===============
-
-  // Replace the handleLogin function in App.js with this SIMPLE VERSION:
-
-const handleLogin = useCallback((e) => {
-  e.preventDefault();
-  setLoginError('');
-  
-  try {
-    if (!loginForm.username || !loginForm.password) {
-      setLoginError('Please enter username and password');
-      return;
-    }
-    
-    // Simple synchronous login
-    const user = authService.login(loginForm.username, loginForm.password);
-    
-    if (user) {
-      console.log('Login successful:', user);
-      setCurrentUser(user);
-      setShowLoginModal(false);
-      setLoginForm({ username: '', password: '' });
-      setStatus('Login successful - Ready to begin');
-      loadPatientsFromLocalStorage();
-      loadTrainingData();
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    setLoginError(error.message || 'Invalid credentials. Try: doctor/doctor123');
-  }
-}, [loginForm, loadPatientsFromLocalStorage, loadTrainingData]);
   // =============== PATIENT MANAGEMENT ===============
 
   const addPatient = useCallback(async () => {
@@ -335,28 +421,11 @@ const handleLogin = useCallback((e) => {
         firstName: newPatientData.firstName.trim(),
         lastName: newPatientData.lastName.trim(),
         createdBy: currentUser?.name || currentUser?.username || 'Unknown',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        visits: []
       };
 
-      // Try to save to backend
-      try {
-        const response = await axios.post(
-          `${apiBaseUrl}/patients`,
-          patient,
-          {
-            headers: authService.getAuthHeaders(),
-            timeout: 5000
-          }
-        );
-        
-        if (response.data) {
-          patient.id = response.data.id || patient.id;
-        }
-      } catch (apiError) {
-        debugLog('Failed to save patient to API, saving locally', apiError.message);
-      }
-
-      // Save to localStorage as backup
+      // Save to localStorage
       const updatedPatients = [...patients, patient];
       setPatients(updatedPatients);
       localStorage.setItem('patients', JSON.stringify(updatedPatients));
@@ -370,7 +439,7 @@ const handleLogin = useCallback((e) => {
       console.error('Error adding patient:', error);
       alert('Failed to save patient: ' + error.message);
     }
-  }, [newPatientData, patients, currentUser, apiBaseUrl, debugLog]);
+  }, [newPatientData, patients, currentUser, debugLog]);
 
   const updatePatient = useCallback(async () => {
     try {
@@ -384,20 +453,6 @@ const handleLogin = useCallback((e) => {
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser?.name || currentUser?.username || 'Unknown'
       };
-
-      // Try to update in backend
-      try {
-        await axios.put(
-          `${apiBaseUrl}/patients/${selectedPatient.id}`,
-          updatedPatient,
-          {
-            headers: authService.getAuthHeaders(),
-            timeout: 5000
-          }
-        );
-      } catch (apiError) {
-        debugLog('Failed to update patient in API, updating locally', apiError.message);
-      }
 
       // Update in localStorage
       const updatedPatients = patients.map(p => 
@@ -413,47 +468,9 @@ const handleLogin = useCallback((e) => {
       console.error('Error updating patient:', error);
       alert('Failed to update patient: ' + error.message);
     }
-  }, [selectedPatient, newPatientData, patients, currentUser, apiBaseUrl, debugLog]);
+  }, [selectedPatient, newPatientData, patients, currentUser, debugLog]);
 
   // =============== SPEECH RECOGNITION ===============
-
-  const cleanupSpeechRecognizer = useCallback(() => {
-    try {
-      debugLog('Cleaning up speech recognizer...');
-      
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      
-      if (recognizerRef.current) {
-        try {
-          recognizerRef.current.close();
-        } catch (e) {
-          // Ignore errors during cleanup
-        }
-        recognizerRef.current = null;
-      }
-      
-      if (audioConfigRef.current) {
-        try {
-          audioConfigRef.current.close();
-        } catch (e) {
-          // Ignore errors during cleanup
-        }
-        audioConfigRef.current = null;
-      }
-      
-      debugLog('Speech recognizer cleanup complete');
-    } catch (error) {
-      console.error('Error during cleanup:', error);
-    }
-  }, [debugLog]);
 
   // Helper function to get speech token from backend
   const getSpeechToken = async () => {
@@ -937,20 +954,6 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
         visits: [...(selectedPatient.visits || []), visit]
       };
 
-      // Try to save to backend
-      try {
-        await axios.post(
-          `${apiBaseUrl}/patients/${selectedPatient.id}/visits`,
-          visit,
-          {
-            headers: authService.getAuthHeaders(),
-            timeout: 5000
-          }
-        );
-      } catch (apiError) {
-        debugLog('Failed to save visit to API, saving locally', apiError.message);
-      }
-
       // Update local storage
       const updatedPatients = patients.map(p => 
         p.id === selectedPatient.id ? updatedPatient : p
@@ -971,7 +974,7 @@ Current Medications: ${selectedPatient.medications || 'No current medications re
       console.error('Save visit error:', error);
       setStatus('Failed to save visit: ' + (error.message || 'Unknown error'));
     }
-  }, [medicalNotes, selectedPatient, transcript, patients, trainingData, currentUser, apiBaseUrl, debugLog]);
+  }, [medicalNotes, selectedPatient, transcript, patients, trainingData, currentUser, debugLog]);
 
   // =============== TRAINING HANDLERS ===============
 
