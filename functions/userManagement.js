@@ -1,147 +1,172 @@
+// functions/userManagement.js
+// Complete user management Azure Function with role-based access control
+
 const { app } = require('@azure/functions');
 const { TableClient } = require('@azure/data-tables');
-const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
-// Configuration
-const STORAGE_CONNECTION_STRING = process.env.AzureWebJobsStorage;
-const USERS_TABLE_NAME = process.env.USER_TABLE_NAME || 'users';
-const SALT_ROUNDS = 12;
+// Initialize Azure Table Storage connection
+const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const tableName = 'users';
 
-// Initialize Table Client
-const tableClient = TableClient.fromConnectionString(STORAGE_CONNECTION_STRING, USERS_TABLE_NAME);
-
-// Ensure users table exists
-async function ensureTableExists() {
-  try {
-    await tableClient.createTable();
-    console.log(`Table ${USERS_TABLE_NAME} created or already exists`);
-  } catch (error) {
-    if (error.statusCode !== 409) { // 409 = table already exists
-      console.error('Error creating table:', error);
-      throw error;
-    }
+// Create table client
+let tableClient;
+try {
+  if (connectionString) {
+    tableClient = TableClient.fromConnectionString(connectionString, tableName);
   }
+} catch (error) {
+  console.error('Failed to initialize table client:', error);
 }
 
-// Default admin user creation
-async function createDefaultAdmin() {
-  try {
-    const adminEmail = 'darshan@aayuwell.com';
-    
-    // Check if admin already exists
-    try {
-      await tableClient.getEntity('USER', adminEmail);
-      console.log('Default admin user already exists');
-      return;
-    } catch (error) {
-      if (error.statusCode !== 404) {
-        throw error;
-      }
-    }
-
-    // Create default admin
-    const hashedPassword = await bcrypt.hash('Aayuscribe1212@', SALT_ROUNDS);
-    const adminUser = {
-      partitionKey: 'USER',
-      rowKey: adminEmail,
-      username: adminEmail,
-      name: 'Dr. Darshan Patel',
-      role: 'super_admin',
-      passwordHash: hashedPassword,
-      isActive: true,
-      createdBy: 'system',
-      createdAt: new Date().toISOString(),
-      lastLogin: null
-    };
-
-    await tableClient.createEntity(adminUser);
-    console.log('Default admin user created successfully');
-  } catch (error) {
-    console.error('Error creating default admin:', error);
-  }
+// Hash password with salt
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return { salt, hash };
 }
 
-// Utility functions
-function validateUserData(userData) {
-  const { username, name, role, password } = userData;
-  
-  if (!username || !username.trim()) {
-    return { valid: false, error: 'Username is required' };
-  }
-  
-  if (!name || !name.trim()) {
-    return { valid: false, error: 'Name is required' };
-  }
-  
-  if (!role || !['super_admin', 'admin', 'medical_provider', 'support_staff'].includes(role)) {
-    return { valid: false, error: 'Invalid role specified' };
-  }
-  
-  if (password && password.length < 8) {
-    return { valid: false, error: 'Password must be at least 8 characters long' };
-  }
-  
-  return { valid: true };
+// Verify password
+function verifyPassword(password, hash, salt) {
+  const verifyHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return hash === verifyHash;
 }
 
-// UPDATED Permission helper with patient management permissions
-function hasPermission(userRole, requiredPermission) {
+// Check user permissions
+function hasPermission(userRole, permission) {
   const permissions = {
     super_admin: [
-      'scribe', 
-      'add_patients', 
-      'edit_patients',
-      'delete_patients',
-      'add_users', 
-      'read_all_notes', 
-      'edit_all_notes', 
-      'manage_users',
-      'view_all_patients',
-      'export_data'
+      'manage_users', 'add_users', 'edit_users', 'delete_users',
+      'add_patients', 'edit_patients', 'delete_patients',
+      'scribe', 'read_all_notes', 'edit_all_notes', 'delete_all_notes',
+      'manage_settings', 'view_analytics', 'export_data'
     ],
     admin: [
-      'scribe', 
-      'add_patients', 
-      'edit_patients',
-      'delete_patients',
-      'add_users', 
-      'read_all_notes', 
-      'edit_own_notes',
-      'manage_users',
-      'view_all_patients'
+      'manage_users', 'add_users', 'edit_users',
+      'add_patients', 'edit_patients',
+      'scribe', 'read_all_notes', 'edit_own_notes',
+      'view_analytics'
+    ],
+    doctor: [
+      'add_patients', 'edit_patients', 'delete_patients',
+      'scribe', 'read_own_notes', 'edit_own_notes', 'delete_own_notes'
     ],
     medical_provider: [
-      'scribe', 
-      'add_patients',
-      'edit_patients',
-      'delete_patients',
-      'read_own_notes',
-      'edit_own_notes',
-      'view_own_patients'
+      'scribe', 'read_own_notes', 'edit_own_notes'
+    ],
+    nurse: [
+      'add_patients', 'edit_patients', 'read_all_notes'
+    ],
+    staff: [
+      'add_patients', 'edit_patients', 'read_all_notes'
     ],
     support_staff: [
-      'add_patients',
-      'edit_patients', 
-      'read_all_notes',
-      'view_all_patients'
+      'add_patients', 'read_all_notes'
     ]
   };
   
-  return permissions[userRole]?.includes(requiredPermission) || false;
+  return permissions[userRole]?.includes(permission) || false;
 }
 
-function sanitizeUser(user) {
-  const { passwordHash, ...sanitizedUser } = user;
-  return sanitizedUser;
+// Validate user headers
+function validateUserHeaders(headers) {
+  const userId = headers['x-user-id'];
+  const userRole = headers['x-user-role'];
+  
+  if (!userId || !userRole) {
+    return { valid: false, error: 'Authentication required' };
+  }
+  
+  return { valid: true, userId, userRole };
 }
 
-// POST /api/users/validate - Validate login credentials
-app.http('validateUser', {
+// Initialize default users if table is empty
+async function initializeDefaultUsers() {
+  try {
+    // Check if table exists and has users
+    const users = [];
+    const iter = tableClient.listEntities();
+    for await (const entity of iter) {
+      users.push(entity);
+      if (users.length > 0) break; // Table has users, no need to initialize
+    }
+    
+    if (users.length === 0) {
+      console.log('Initializing default users...');
+      
+      // Create default admin user
+      const adminPassword = hashPassword('admin123');
+      await tableClient.createEntity({
+        partitionKey: 'USER',
+        rowKey: 'admin_' + Date.now(),
+        id: 'admin_' + Date.now(),
+        username: 'admin',
+        passwordHash: adminPassword.hash,
+        salt: adminPassword.salt,
+        name: 'System Administrator',
+        email: 'admin@aayuscribe.com',
+        role: 'super_admin',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Create default doctor user
+      const doctorPassword = hashPassword('doctor123');
+      await tableClient.createEntity({
+        partitionKey: 'USER',
+        rowKey: 'doctor_' + Date.now(),
+        id: 'doctor_' + Date.now(),
+        username: 'doctor',
+        passwordHash: doctorPassword.hash,
+        salt: doctorPassword.salt,
+        name: 'Dr. Demo User',
+        email: 'doctor@aayuscribe.com',
+        role: 'doctor',
+        specialty: 'internal_medicine',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Create default staff user
+      const staffPassword = hashPassword('staff123');
+      await tableClient.createEntity({
+        partitionKey: 'USER',
+        rowKey: 'staff_' + Date.now(),
+        id: 'staff_' + Date.now(),
+        username: 'staff',
+        passwordHash: staffPassword.hash,
+        salt: staffPassword.salt,
+        name: 'Staff User',
+        email: 'staff@aayuscribe.com',
+        role: 'staff',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      });
+      
+      console.log('Default users created successfully');
+    }
+  } catch (error) {
+    console.error('Error initializing default users:', error);
+  }
+}
+
+// Initialize on first load
+if (tableClient) {
+  initializeDefaultUsers().catch(console.error);
+}
+
+// Login endpoint
+app.http('users-login', {
   methods: ['POST'],
-  route: 'users/validate',
+  route: 'users/login',
   handler: async (request, context) => {
     try {
-      await ensureTableExists();
+      if (!tableClient) {
+        return {
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
+        };
+      }
       
       const body = await request.json();
       const { username, password } = body;
@@ -153,61 +178,64 @@ app.http('validateUser', {
         };
       }
       
-      // Get user from table
-      try {
-        const user = await tableClient.getEntity('USER', username);
-        
-        if (!user.isActive) {
-          return {
-            status: 401,
-            jsonBody: { error: 'Account is disabled' }
-          };
-        }
-        
-        // Verify password
-        const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-        
-        if (!passwordMatch) {
-          return {
-            status: 401,
-            jsonBody: { error: 'Invalid credentials' }
-          };
-        }
-        
-        // Update last login
-        await tableClient.updateEntity({
-          partitionKey: 'USER',
-          rowKey: username,
-          lastLogin: new Date().toISOString()
-        }, 'Merge');
-        
-        // Return user data (without password hash)
-        return {
-          status: 200,
-          jsonBody: {
-            success: true,
-            user: {
-              id: user.username,
-              username: user.username,
-              name: user.name,
-              role: user.role,
-              lastLogin: new Date().toISOString()
-            }
-          }
-        };
-        
-      } catch (error) {
-        if (error.statusCode === 404) {
-          return {
-            status: 401,
-            jsonBody: { error: 'Invalid credentials' }
-          };
-        }
-        throw error;
+      // Find user by username
+      const users = [];
+      const iter = tableClient.listEntities({
+        queryOptions: { filter: `username eq '${username.toLowerCase()}'` }
+      });
+      
+      for await (const entity of iter) {
+        users.push(entity);
       }
       
+      if (users.length === 0) {
+        return {
+          status: 401,
+          jsonBody: { error: 'Invalid username or password' }
+        };
+      }
+      
+      const user = users[0];
+      
+      // Check if user is active
+      if (!user.isActive) {
+        return {
+          status: 403,
+          jsonBody: { error: 'Account is disabled. Please contact administrator.' }
+        };
+      }
+      
+      // Verify password
+      if (!verifyPassword(password, user.passwordHash, user.salt)) {
+        return {
+          status: 401,
+          jsonBody: { error: 'Invalid username or password' }
+        };
+      }
+      
+      // Update last login
+      user.lastLogin = new Date().toISOString();
+      await tableClient.updateEntity(user, 'Merge');
+      
+      // Generate session token
+      const token = crypto.randomBytes(32).toString('hex');
+      
+      // Return user data (without sensitive info)
+      return {
+        status: 200,
+        jsonBody: {
+          id: user.id || user.rowKey,
+          username: user.username,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          specialty: user.specialty,
+          token: token
+        }
+      };
+      
     } catch (error) {
-      console.error('Validate user error:', error);
+      console.error('Login error:', error);
       return {
         status: 500,
         jsonBody: { error: 'Internal server error' }
@@ -216,32 +244,53 @@ app.http('validateUser', {
   }
 });
 
-// GET /api/users - List all users (admin only)
-app.http('listUsers', {
+// Get all users endpoint
+app.http('users-list', {
   methods: ['GET'],
   route: 'users',
   handler: async (request, context) => {
     try {
-      await ensureTableExists();
+      if (!tableClient) {
+        return {
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
+        };
+      }
       
-      // Check permissions
-      const userRole = request.headers.get('x-user-role');
+      // Validate user permissions
+      const validation = validateUserHeaders(request.headers);
+      if (!validation.valid) {
+        return {
+          status: 401,
+          jsonBody: { error: validation.error }
+        };
+      }
       
-      if (!hasPermission(userRole, 'manage_users')) {
+      if (!hasPermission(validation.userRole, 'manage_users')) {
         return {
           status: 403,
-          jsonBody: { error: 'Insufficient permissions' }
+          jsonBody: { error: 'You do not have permission to view users' }
         };
       }
       
       // Get all users
       const users = [];
-      const entitiesIter = tableClient.listEntities({
-        queryOptions: { filter: "PartitionKey eq 'USER'" }
-      });
+      const iter = tableClient.listEntities();
       
-      for await (const entity of entitiesIter) {
-        users.push(sanitizeUser(entity));
+      for await (const entity of iter) {
+        if (entity.partitionKey === 'USER') {
+          users.push({
+            id: entity.id || entity.rowKey,
+            username: entity.username,
+            name: entity.name,
+            email: entity.email,
+            role: entity.role,
+            specialty: entity.specialty,
+            isActive: entity.isActive !== false,
+            createdAt: entity.createdAt,
+            lastLogin: entity.lastLogin
+          });
+        }
       }
       
       return {
@@ -250,248 +299,359 @@ app.http('listUsers', {
       };
       
     } catch (error) {
-      console.error('List users error:', error);
+      console.error('Error fetching users:', error);
       return {
         status: 500,
-        jsonBody: { error: 'Internal server error' }
+        jsonBody: { error: 'Failed to fetch users' }
       };
     }
   }
 });
 
-// POST /api/users - Create new user (admin only)
-app.http('createUser', {
+// Create user endpoint
+app.http('users-create', {
   methods: ['POST'],
   route: 'users',
   handler: async (request, context) => {
     try {
-      await ensureTableExists();
-      
-      // Check permissions
-      const userRole = request.headers.get('x-user-role');
-      const createdBy = request.headers.get('x-user-id');
-      
-      if (!hasPermission(userRole, 'manage_users')) {
+      if (!tableClient) {
         return {
-          status: 403,
-          jsonBody: { error: 'Insufficient permissions' }
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
         };
       }
       
-      const userData = await request.json();
-      
-      // Validate input
-      const validation = validateUserData(userData);
+      // Validate user permissions
+      const validation = validateUserHeaders(request.headers);
       if (!validation.valid) {
         return {
-          status: 400,
+          status: 401,
           jsonBody: { error: validation.error }
         };
       }
       
-      // Check if user already exists
-      try {
-        await tableClient.getEntity('USER', userData.username);
+      if (!hasPermission(validation.userRole, 'add_users')) {
         return {
-          status: 409,
-          jsonBody: { error: 'User already exists' }
+          status: 403,
+          jsonBody: { error: 'You do not have permission to add users' }
         };
-      } catch (error) {
-        if (error.statusCode !== 404) {
-          throw error;
-        }
+      }
+      
+      const body = await request.json();
+      const { username, password, name, email, role, specialty, isActive } = body;
+      
+      // Validate required fields
+      if (!username || !password || !name || !role) {
+        return {
+          status: 400,
+          jsonBody: { error: 'Username, password, name, and role are required' }
+        };
+      }
+      
+      // Check if username already exists
+      const existingUsers = [];
+      const iter = tableClient.listEntities({
+        queryOptions: { filter: `username eq '${username.toLowerCase()}'` }
+      });
+      
+      for await (const entity of iter) {
+        existingUsers.push(entity);
+      }
+      
+      if (existingUsers.length > 0) {
+        return {
+          status: 400,
+          jsonBody: { error: 'Username already exists' }
+        };
       }
       
       // Hash password
-      const hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
+      const { salt, hash } = hashPassword(password);
       
       // Create user entity
-      const newUser = {
+      const userId = body.id || `user_${Date.now()}`;
+      const userEntity = {
         partitionKey: 'USER',
-        rowKey: userData.username,
-        username: userData.username,
-        name: userData.name.trim(),
-        role: userData.role,
-        passwordHash: hashedPassword,
-        isActive: true,
-        createdBy: createdBy || 'system',
+        rowKey: userId,
+        id: userId,
+        username: username.toLowerCase(),
+        passwordHash: hash,
+        salt: salt,
+        name: name,
+        email: email || '',
+        role: role,
+        specialty: specialty || '',
+        isActive: isActive !== false,
         createdAt: new Date().toISOString(),
-        lastLogin: null
+        createdBy: validation.userId
       };
       
-      await tableClient.createEntity(newUser);
+      await tableClient.createEntity(userEntity);
       
+      // Return user data (without password info)
       return {
         status: 201,
         jsonBody: {
-          success: true,
-          message: 'User created successfully',
-          user: sanitizeUser(newUser)
+          id: userId,
+          username: userEntity.username,
+          name: userEntity.name,
+          email: userEntity.email,
+          role: userEntity.role,
+          specialty: userEntity.specialty,
+          isActive: userEntity.isActive
         }
       };
       
     } catch (error) {
-      console.error('Create user error:', error);
+      console.error('Error creating user:', error);
       return {
         status: 500,
-        jsonBody: { error: 'Internal server error' }
+        jsonBody: { error: 'Failed to create user' }
       };
     }
   }
 });
 
-// PUT /api/users/:username - Update user (admin only)
-app.http('updateUser', {
+// Update user endpoint
+app.http('users-update', {
   methods: ['PUT'],
-  route: 'users/{username}',
+  route: 'users/{id}',
   handler: async (request, context) => {
     try {
-      await ensureTableExists();
-      
-      // Check permissions
-      const userRole = request.headers.get('x-user-role');
-      
-      if (!hasPermission(userRole, 'manage_users')) {
+      if (!tableClient) {
         return {
-          status: 403,
-          jsonBody: { error: 'Insufficient permissions' }
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
         };
       }
       
-      const username = request.params.username;
-      const updateData = await request.json();
+      // Validate user permissions
+      const validation = validateUserHeaders(request.headers);
+      if (!validation.valid) {
+        return {
+          status: 401,
+          jsonBody: { error: validation.error }
+        };
+      }
+      
+      if (!hasPermission(validation.userRole, 'edit_users')) {
+        return {
+          status: 403,
+          jsonBody: { error: 'You do not have permission to edit users' }
+        };
+      }
+      
+      const userId = request.params.id;
+      const body = await request.json();
       
       // Get existing user
       let existingUser;
       try {
-        existingUser = await tableClient.getEntity('USER', username);
+        existingUser = await tableClient.getEntity('USER', userId);
       } catch (error) {
-        if (error.statusCode === 404) {
-          return {
-            status: 404,
-            jsonBody: { error: 'User not found' }
-          };
-        }
-        throw error;
+        return {
+          status: 404,
+          jsonBody: { error: 'User not found' }
+        };
       }
       
-      // Update fields
-      const updatedUser = {
-        partitionKey: 'USER',
-        rowKey: username,
-        ...existingUser
-      };
+      // Update user fields (excluding password)
+      if (body.name !== undefined) existingUser.name = body.name;
+      if (body.email !== undefined) existingUser.email = body.email;
+      if (body.role !== undefined) existingUser.role = body.role;
+      if (body.specialty !== undefined) existingUser.specialty = body.specialty;
+      if (body.isActive !== undefined) existingUser.isActive = body.isActive;
       
-      if (updateData.name) updatedUser.name = updateData.name;
-      if (updateData.role) updatedUser.role = updateData.role;
-      if (updateData.isActive !== undefined) updatedUser.isActive = updateData.isActive;
+      existingUser.updatedAt = new Date().toISOString();
+      existingUser.updatedBy = validation.userId;
       
-      // Update password if provided
-      if (updateData.password) {
-        if (updateData.password.length < 8) {
-          return {
-            status: 400,
-            jsonBody: { error: 'Password must be at least 8 characters long' }
-          };
-        }
-        updatedUser.passwordHash = await bcrypt.hash(updateData.password, SALT_ROUNDS);
-      }
+      await tableClient.updateEntity(existingUser, 'Replace');
       
-      updatedUser.updatedAt = new Date().toISOString();
-      
-      await tableClient.updateEntity(updatedUser, 'Replace');
-      
+      // Return updated user data
       return {
         status: 200,
         jsonBody: {
-          success: true,
-          message: 'User updated successfully',
-          user: sanitizeUser(updatedUser)
+          id: existingUser.id || existingUser.rowKey,
+          username: existingUser.username,
+          name: existingUser.name,
+          email: existingUser.email,
+          role: existingUser.role,
+          specialty: existingUser.specialty,
+          isActive: existingUser.isActive
         }
       };
       
     } catch (error) {
-      console.error('Update user error:', error);
+      console.error('Error updating user:', error);
       return {
         status: 500,
-        jsonBody: { error: 'Internal server error' }
+        jsonBody: { error: 'Failed to update user' }
       };
     }
   }
 });
 
-// DELETE /api/users/:username - Delete user (super admin only)
-app.http('deleteUser', {
+// Delete user endpoint
+app.http('users-delete', {
   methods: ['DELETE'],
-  route: 'users/{username}',
+  route: 'users/{id}',
   handler: async (request, context) => {
     try {
-      await ensureTableExists();
+      if (!tableClient) {
+        return {
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
+        };
+      }
       
-      // Check permissions - only super admin can delete users
-      const userRole = request.headers.get('x-user-role');
+      // Validate user permissions
+      const validation = validateUserHeaders(request.headers);
+      if (!validation.valid) {
+        return {
+          status: 401,
+          jsonBody: { error: validation.error }
+        };
+      }
       
-      if (userRole !== 'super_admin') {
+      if (!hasPermission(validation.userRole, 'delete_users')) {
         return {
           status: 403,
-          jsonBody: { error: 'Only super admin can delete users' }
+          jsonBody: { error: 'You do not have permission to delete users' }
         };
       }
       
-      const username = request.params.username;
+      const userId = request.params.id;
       
-      // Prevent deleting the main admin account
-      if (username === 'darshan@aayuwell.com') {
+      // Prevent self-deletion
+      if (userId === validation.userId) {
         return {
           status: 400,
-          jsonBody: { error: 'Cannot delete the primary administrator account' }
+          jsonBody: { error: 'You cannot delete your own account' }
         };
-      }
-      
-      // Check if user exists
-      try {
-        await tableClient.getEntity('USER', username);
-      } catch (error) {
-        if (error.statusCode === 404) {
-          return {
-            status: 404,
-            jsonBody: { error: 'User not found' }
-          };
-        }
-        throw error;
       }
       
       // Delete user
-      await tableClient.deleteEntity('USER', username);
+      try {
+        await tableClient.deleteEntity('USER', userId);
+      } catch (error) {
+        return {
+          status: 404,
+          jsonBody: { error: 'User not found' }
+        };
+      }
       
       return {
         status: 200,
-        jsonBody: {
-          success: true,
-          message: 'User deleted successfully'
-        }
+        jsonBody: { message: 'User deleted successfully' }
       };
       
     } catch (error) {
-      console.error('Delete user error:', error);
+      console.error('Error deleting user:', error);
       return {
         status: 500,
-        jsonBody: { error: 'Internal server error' }
+        jsonBody: { error: 'Failed to delete user' }
       };
     }
   }
 });
 
-// Initialize default data on startup
-async function initializeDatabase() {
-  try {
-    await ensureTableExists();
-    await createDefaultAdmin();
-    console.log('Database initialization completed');
-  } catch (error) {
-    console.error('Database initialization error:', error);
+// Verify session endpoint
+app.http('users-verify', {
+  methods: ['GET'],
+  route: 'users/verify',
+  handler: async (request, context) => {
+    try {
+      const validation = validateUserHeaders(request.headers);
+      
+      if (!validation.valid) {
+        return {
+          status: 401,
+          jsonBody: { valid: false, error: validation.error }
+        };
+      }
+      
+      return {
+        status: 200,
+        jsonBody: { 
+          valid: true,
+          userId: validation.userId,
+          role: validation.userRole
+        }
+      };
+      
+    } catch (error) {
+      console.error('Verify error:', error);
+      return {
+        status: 500,
+        jsonBody: { valid: false, error: 'Internal server error' }
+      };
+    }
   }
-}
+});
 
-// Initialize when module loads
-initializeDatabase();
+// Change password endpoint
+app.http('users-change-password', {
+  methods: ['POST'],
+  route: 'users/change-password',
+  handler: async (request, context) => {
+    try {
+      if (!tableClient) {
+        return {
+          status: 500,
+          jsonBody: { error: 'Database connection not available' }
+        };
+      }
+      
+      const body = await request.json();
+      const { userId, oldPassword, newPassword } = body;
+      
+      if (!userId || !oldPassword || !newPassword) {
+        return {
+          status: 400,
+          jsonBody: { error: 'All fields are required' }
+        };
+      }
+      
+      // Get user
+      let user;
+      try {
+        user = await tableClient.getEntity('USER', userId);
+      } catch (error) {
+        return {
+          status: 404,
+          jsonBody: { error: 'User not found' }
+        };
+      }
+      
+      // Verify old password
+      if (!verifyPassword(oldPassword, user.passwordHash, user.salt)) {
+        return {
+          status: 401,
+          jsonBody: { error: 'Current password is incorrect' }
+        };
+      }
+      
+      // Hash new password
+      const { salt, hash } = hashPassword(newPassword);
+      
+      // Update password
+      user.passwordHash = hash;
+      user.salt = salt;
+      user.passwordChangedAt = new Date().toISOString();
+      
+      await tableClient.updateEntity(user, 'Replace');
+      
+      return {
+        status: 200,
+        jsonBody: { message: 'Password changed successfully' }
+      };
+      
+    } catch (error) {
+      console.error('Error changing password:', error);
+      return {
+        status: 500,
+        jsonBody: { error: 'Failed to change password' }
+      };
+    }
+  }
+});
