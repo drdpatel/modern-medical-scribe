@@ -1,160 +1,110 @@
-// src/authService.js
-// SIMPLIFIED VERSION - NO API CALLS, GUARANTEED TO WORK
-
+// Authentication Service - Uses API endpoints instead of direct Azure Tables
 class AuthService {
   constructor() {
-    this.currentUser = this.loadUser();
-    this.sessionTimeout = 12 * 60 * 60 * 1000; // 12 hours
-  }
-
-  // Load user from localStorage
-  loadUser() {
-    try {
-      const stored = localStorage.getItem('currentUser');
-      if (stored) {
-        return JSON.parse(stored);
-      }
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  // SIMPLE LOGIN - NO API, JUST WORKS
-  login(username, password) {
-    console.log('Login attempt:', username);
-    
-    // Clean inputs
-    const user = username.trim().toLowerCase();
-    const pass = password.trim();
-    
-    // Check credentials
-    let userData = null;
-    
-    // Doctor login
-    if ((user === 'doctor' || user === 'dr') && pass === 'doctor123') {
-      userData = {
-        id: 'doctor_001',
-        username: 'doctor',
-        name: 'Dr. Demo User',
-        email: 'doctor@example.com',
-        role: 'doctor'
-      };
-    }
-    // Admin login
-    else if (user === 'admin' && pass === 'admin123') {
-      userData = {
-        id: 'admin_001',
-        username: 'admin',
-        name: 'Administrator',
-        email: 'admin@aayuwell.com',
-        role: 'super_admin'
-      };
-    }
-    // Darshan login (multiple variants)
-    else if ((user === 'darshan' || user === 'darshan@aayuwell.com' || user === 'drdpatel') && 
-             (pass === 'darshan123' || pass === 'admin123' || pass === 'password')) {
-      userData = {
-        id: 'darshan_001',
-        username: 'darshan',
-        name: 'Darshan Patel',
-        email: 'darshan@aayuwell.com',
-        role: 'super_admin'
-      };
-    }
-    // Staff login
-    else if (user === 'staff' && pass === 'staff123') {
-      userData = {
-        id: 'staff_001',
-        username: 'staff',
-        name: 'Staff User',
-        email: 'staff@example.com',
-        role: 'staff'
-      };
-    }
-    // Test login - accept anything for testing
-    else if (user === 'test' || pass === 'test') {
-      userData = {
-        id: 'test_001',
-        username: user,
-        name: 'Test User',
-        email: 'test@example.com',
-        role: 'doctor'
-      };
-    }
-    
-    // If login successful
-    if (userData) {
-      userData.sessionExpiry = new Date(Date.now() + this.sessionTimeout).toISOString();
-      userData.loginTime = new Date().toISOString();
-      
-      // Store user
-      localStorage.setItem('currentUser', JSON.stringify(userData));
-      this.currentUser = userData;
-      
-      console.log('Login successful:', userData);
-      return userData; // Return user directly for sync compatibility
-    }
-    
-    // Login failed
-    console.log('Login failed - invalid credentials');
-    throw new Error('Invalid credentials. Try: doctor/doctor123');
-  }
-
-  // Async wrapper for login (for App.js compatibility)
-  async loginAsync(username, password) {
-    try {
-      const user = this.login(username, password);
-      return { success: true, user };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Logout
-  logout() {
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('authToken');
     this.currentUser = null;
-    console.log('Logged out');
+    this.isInitialized = false;
+    this.initializationPromise = this.initialize();
   }
 
-  // Check if authenticated
+  async initialize() {
+    try {
+      console.log('Initializing AuthService...');
+      
+      // Load saved user from localStorage if exists
+      const savedToken = localStorage.getItem('authToken');
+      if (savedToken) {
+        const tokenData = JSON.parse(atob(savedToken.split('.')[1]));
+        
+        // Check if token is still valid (12 hours)
+        if (Date.now() < tokenData.exp) {
+          this.currentUser = tokenData.user;
+          this.isInitialized = true;
+          this.startInactivityTimer();
+        } else {
+          localStorage.removeItem('authToken');
+        }
+      }
+      
+      this.isInitialized = true;
+      console.log('✅ AuthService initialized');
+    } catch (error) {
+      console.error('AuthService initialization error:', error);
+      this.isInitialized = true; // Still mark as initialized to prevent hanging
+    }
+  }
+
+  // Wait for initialization
+  get ready() {
+    return this.initializationPromise;
+  }
+
+  // Generate JWT token (simplified)
+  generateToken(user) {
+    const header = btoa(JSON.stringify({ typ: 'JWT', alg: 'HS256' }));
+    const payload = btoa(JSON.stringify({
+      user: {
+        id: user.rowKey || user.username,
+        username: user.username,
+        role: user.role,
+        name: user.name
+      },
+      exp: Date.now() + (12 * 60 * 60 * 1000), // 12 hours
+      iat: Date.now()
+    }));
+    return `${header}.${payload}.signature`;
+  }
+
+  // Login user
+  async login(username, password) {
+    try {
+      await this.ready;
+      
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username, password })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Login failed');
+      }
+
+      const result = await response.json();
+      
+      // Generate and store token
+      const token = this.generateToken(result.user);
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('lastActivity', Date.now().toString());
+
+      this.currentUser = {
+        id: result.user.rowKey || result.user.username,
+        username: result.user.username,
+        role: result.user.role,
+        name: result.user.name
+      };
+
+      this.startInactivityTimer();
+      return this.currentUser;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw new Error(error.message || 'Login failed');
+    }
+  }
+
+  // Logout user
+  logout() {
+    this.currentUser = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('lastActivity');
+    if (this.inactivityTimer) {
+      clearInterval(this.inactivityTimer);
+    }
+  }
+
+  // Check if user is authenticated
   isAuthenticated() {
-    return this.currentUser !== null;
-  }
-
-  // Check permissions
-  hasPermission(permission) {
-    if (!this.currentUser) return false;
-    
-    const role = this.currentUser.role;
-    
-    // Super admin can do everything
-    if (role === 'super_admin' || role === 'admin') {
-      return true;
-    }
-    
-    // Doctor permissions
-    if (role === 'doctor') {
-      const doctorPerms = ['scribe', 'training', 'add_patients', 'edit_patients', 'delete_patients'];
-      return doctorPerms.includes(permission);
-    }
-    
-    // Staff permissions
-    if (role === 'staff') {
-      const staffPerms = ['add_patients', 'edit_patients'];
-      return staffPerms.includes(permission);
-    }
-    
-    return false;
-  }
-
-  // Check role
-  hasRole(roles) {
-    if (!this.currentUser) return false;
-    const roleArray = Array.isArray(roles) ? roles : [roles];
-    return roleArray.includes(this.currentUser.role);
+    return !!this.currentUser;
   }
 
   // Get current user
@@ -162,48 +112,232 @@ class AuthService {
     return this.currentUser;
   }
 
-  // Update session
-  updateSession() {
-    if (this.currentUser) {
-      this.currentUser.sessionExpiry = new Date(Date.now() + this.sessionTimeout).toISOString();
-      localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+  // Start inactivity timer (1 hour)
+  startInactivityTimer() {
+    if (this.inactivityTimer) {
+      clearInterval(this.inactivityTimer);
+    }
+
+    this.inactivityTimer = setInterval(() => {
+      const lastActivity = parseInt(localStorage.getItem('lastActivity') || '0');
+      const now = Date.now();
+      
+      if (now - lastActivity > 60 * 60 * 1000) { // 1 hour
+        this.logout();
+        window.location.reload();
+      }
+    }, 60000); // Check every minute
+
+    // Update activity on user interaction
+    ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+      document.addEventListener(event, () => {
+        localStorage.setItem('lastActivity', Date.now().toString());
+      }, true);
+    });
+  }
+
+  // Check user permissions
+  hasPermission(action) {
+    if (!this.currentUser) return false;
+    
+    const permissions = {
+      'Super Admin': ['all'],
+      'Admin': ['manage_users', 'manage_patients', 'scribe', 'view_all_visits', 'add_patients'],
+      'Medical Provider': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients'],
+      'Support Staff': ['view_patients', 'add_patients']
+    };
+
+    const userPermissions = permissions[this.currentUser.role] || [];
+    return userPermissions.includes('all') || userPermissions.includes(action);
+  }
+
+  // User Management
+  async getUsers() {
+    try {
+      const response = await fetch('/api/users');
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
     }
   }
 
-  // Get auth headers (for API calls that might work)
-  getAuthHeaders() {
-    if (!this.currentUser) return {};
-    
-    return {
-      'x-user-id': this.currentUser.id || '',
-      'x-user-role': this.currentUser.role || '',
-      'x-user-name': this.currentUser.name || ''
-    };
+  async createUser(userData) {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'create', 
+          userData,
+          createdBy: this.currentUser?.username || 'system'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create user');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
   }
 
-  // Simple session check
-  isSessionValid() {
-    if (!this.currentUser) return false;
-    if (!this.currentUser.sessionExpiry) return true;
-    return new Date(this.currentUser.sessionExpiry) > new Date();
+  async updateUser(userData) {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+
+      if (!response.ok) throw new Error('Failed to update user');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
   }
 
-  // Verify session (always returns true for local)
-  async verifySession() {
-    return this.isSessionValid();
+  async deleteUser(username) {
+    try {
+      const response = await fetch(`/api/users?username=${username}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Failed to delete user');
+      return await response.json();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
   }
 
-  // Create user (mock)
-  createUser(userData) {
-    console.log('User creation request:', userData);
-    return { success: true, message: 'User creation logged (local mode)' };
+  // Patient Management
+  async getPatients() {
+    try {
+      const response = await fetch('/api/patients');
+      if (!response.ok) throw new Error('Failed to fetch patients');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      return [];
+    }
+  }
+
+  async savePatient(patientData) {
+    try {
+      const response = await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...patientData,
+          createdBy: this.currentUser?.username || 'system'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save patient');
+      return await response.json();
+    } catch (error) {
+      console.error('Error saving patient:', error);
+      throw error;
+    }
+  }
+
+  async updatePatient(patientData) {
+    try {
+      const response = await fetch('/api/patients', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patientData)
+      });
+
+      if (!response.ok) throw new Error('Failed to update patient');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      throw error;
+    }
+  }
+
+  // Visit Management
+  async getVisits(patientId) {
+    try {
+      const response = await fetch(`/api/visits?patientId=${patientId}`);
+      if (!response.ok) throw new Error('Failed to fetch visits');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching visits:', error);
+      return [];
+    }
+  }
+
+  async saveVisit(patientId, visitData) {
+    try {
+      const response = await fetch('/api/visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...visitData,
+          patientId,
+          createdBy: this.currentUser?.username || 'system',
+          createdByName: this.currentUser?.name || 'System'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save visit');
+      return await response.json();
+    } catch (error) {
+      console.error('Error saving visit:', error);
+      throw error;
+    }
+  }
+
+  // Load current user from localStorage
+  async loadCurrentUser() {
+    try {
+      await this.ready;
+      
+      if (!this.isInitialized) {
+        console.log('AuthService not initialized');
+        return null;
+      }
+
+      const token = localStorage.getItem('authToken');
+      
+      if (!token) {
+        return null;
+      }
+
+      // Parse token
+      try {
+        const tokenData = JSON.parse(atob(token.split('.')[1]));
+        
+        // Check expiration
+        if (Date.now() >= tokenData.exp) {
+          this.logout();
+          return null;
+        }
+
+        this.currentUser = tokenData.user;
+        this.startInactivityTimer();
+        return this.currentUser;
+      } catch (error) {
+        console.error('Invalid token:', error);
+        this.logout();
+        return null;
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+      return null;
+    }
   }
 }
 
-// Create instance
+// Create singleton instance
 const authService = new AuthService();
-
-// Make it globally available for debugging
-window.authService = authService;
-
 export default authService;
