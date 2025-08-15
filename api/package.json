@@ -1,9 +1,13 @@
 {
   "name": "api",
   "version": "1.0.0",
-  "description": "API for Aayu AI Scribe",
+  "description": "",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
   "dependencies": {
-    "@azure/data-tables": "^13.2.2",
-    "crypto": "^1.0.1"
-  }
+    "@azure/data-tables": "^13.2.2"
+  },
+  "devDependencies": {}
 }
