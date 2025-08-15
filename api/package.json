@@ -1,0 +1,9 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "API for Aayu AI Scribe",
+  "dependencies": {
+    "@azure/data-tables": "^13.2.2",
+    "crypto": "^1.0.1"
+  }
+}
