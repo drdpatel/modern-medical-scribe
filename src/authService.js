@@ -3,6 +3,7 @@ class AuthService {
   constructor() {
     this.currentUser = null;
     this.isInitialized = false;
+    this.apiUrl = 'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api';
     this.initializationPromise = this.initialize();
   }
 
@@ -59,9 +60,7 @@ class AuthService {
     try {
       await this.ready;
       
-      const apiUrl = process.env.REACT_APP_API_URL || 'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api';
-const response = await fetch(`${apiUrl}/users`, {
-  
+      const response = await fetch(`${this.apiUrl}/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', username, password })
@@ -114,6 +113,21 @@ const response = await fetch(`${apiUrl}/users`, {
     return this.currentUser;
   }
 
+  // Get auth headers for API calls
+  getAuthHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': this.currentUser?.id || '',
+      'x-user-role': this.currentUser?.role || '',
+      'x-user-name': this.currentUser?.name || ''
+    };
+  }
+
+  // Update session
+  updateSession() {
+    localStorage.setItem('lastActivity', Date.now().toString());
+  }
+
   // Start inactivity timer (1 hour)
   startInactivityTimer() {
     if (this.inactivityTimer) {
@@ -144,9 +158,15 @@ const response = await fetch(`${apiUrl}/users`, {
     
     const permissions = {
       'Super Admin': ['all'],
-      'Admin': ['manage_users', 'manage_patients', 'scribe', 'view_all_visits', 'add_patients'],
-      'Medical Provider': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients'],
-      'Support Staff': ['view_patients', 'add_patients']
+      'super_admin': ['all'],
+      'Admin': ['manage_users', 'manage_patients', 'scribe', 'view_all_visits', 'add_patients', 'training', 'manage_settings'],
+      'admin': ['manage_users', 'manage_patients', 'scribe', 'view_all_visits', 'add_patients', 'training', 'manage_settings'],
+      'Medical Provider': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients', 'training'],
+      'medical_provider': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients', 'training'],
+      'doctor': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients', 'training'],
+      'Support Staff': ['view_patients', 'add_patients'],
+      'support_staff': ['view_patients', 'add_patients'],
+      'clinician': ['scribe', 'view_own_visits', 'manage_own_patients', 'add_patients', 'training']
     };
 
     const userPermissions = permissions[this.currentUser.role] || [];
@@ -156,7 +176,7 @@ const response = await fetch(`${apiUrl}/users`, {
   // User Management
   async getUsers() {
     try {
-      const response = await fetch('/api/users');
+      const response = await fetch(`${this.apiUrl}/users`);
       if (!response.ok) throw new Error('Failed to fetch users');
       return await response.json();
     } catch (error) {
@@ -167,7 +187,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async createUser(userData) {
     try {
-      const response = await fetch('/api/users', {
+      const response = await fetch(`${this.apiUrl}/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -191,7 +211,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async updateUser(userData) {
     try {
-      const response = await fetch('/api/users', {
+      const response = await fetch(`${this.apiUrl}/users`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
@@ -207,7 +227,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async deleteUser(username) {
     try {
-      const response = await fetch(`/api/users?username=${username}`, {
+      const response = await fetch(`${this.apiUrl}/users?username=${username}`, {
         method: 'DELETE'
       });
 
@@ -222,7 +242,7 @@ const response = await fetch(`${apiUrl}/users`, {
   // Patient Management
   async getPatients() {
     try {
-      const response = await fetch('/api/patients');
+      const response = await fetch(`${this.apiUrl}/patients`);
       if (!response.ok) throw new Error('Failed to fetch patients');
       return await response.json();
     } catch (error) {
@@ -233,7 +253,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async savePatient(patientData) {
     try {
-      const response = await fetch('/api/patients', {
+      const response = await fetch(`${this.apiUrl}/patients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -252,7 +272,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async updatePatient(patientData) {
     try {
-      const response = await fetch('/api/patients', {
+      const response = await fetch(`${this.apiUrl}/patients`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patientData)
@@ -269,7 +289,7 @@ const response = await fetch(`${apiUrl}/users`, {
   // Visit Management
   async getVisits(patientId) {
     try {
-      const response = await fetch(`/api/visits?patientId=${patientId}`);
+      const response = await fetch(`${this.apiUrl}/visits?patientId=${patientId}`);
       if (!response.ok) throw new Error('Failed to fetch visits');
       return await response.json();
     } catch (error) {
@@ -280,7 +300,7 @@ const response = await fetch(`${apiUrl}/users`, {
 
   async saveVisit(patientId, visitData) {
     try {
-      const response = await fetch('/api/visits', {
+      const response = await fetch(`${this.apiUrl}/visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
