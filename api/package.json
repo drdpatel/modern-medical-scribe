@@ -1,13 +1,11 @@
 {
-  "name": "api",
+  "name": "aayu-scribe-api",
   "version": "1.0.0",
-  "description": "",
-  "scripts": {
-    "start": "func start",
-    "test": "echo \"No tests yet...\""
+  "private": true,
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "@azure/data-tables": "^13.2.2"
-  },
-  "devDependencies": {}
+    "@azure/data-tables": "^13.3.0"
+  }
 }
