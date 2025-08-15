@@ -1,100 +1,56 @@
-const { TableClient } = require("@azure/data-tables");
+const { TableClient, odata } = require("@azure/data-tables");
+const TABLE_NAME = "patients";
 
 module.exports = async function (context, req) {
-  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING || process.env.WEBSITE_CONTENTAZUREFILECONNECTIONSTRING;
-  
-  if (!connectionString) {
-    context.res = {
-      status: 500,
-      body: { error: "Storage connection not configured" }
-    };
-    return;
-  }
-
-  const patientsTable = TableClient.fromConnectionString(connectionString, "patients");
-
   try {
-    // Ensure table exists
-    await patientsTable.createTable().catch(e => {});
+    const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
+    if (!conn) return (context.res = { status: 500, body: { error: "Server config missing" } });
 
-    switch (req.method) {
-      case 'GET':
-        // Get all patients or specific patient
-        if (req.query.patientId) {
-          try {
-            const patient = await patientsTable.getEntity('patient', req.query.patientId);
-            context.res = { body: patient };
-          } catch (error) {
-            context.res = { status: 404, body: { error: "Patient not found" } };
-          }
-        } else {
-          const patients = [];
-          const entities = patientsTable.listEntities();
-          for await (const entity of entities) {
-            patients.push({
-              id: entity.rowKey,
-              firstName: entity.firstName,
-              lastName: entity.lastName,
-              dateOfBirth: entity.dateOfBirth,
-              medicalHistory: entity.medicalHistory || '',
-              medications: entity.medications || '',
-              phone: entity.phone || '',
-              email: entity.email || '',
-              createdAt: entity.createdAt,
-              createdBy: entity.createdBy
-            });
-          }
-          context.res = { body: patients };
+    const client = TableClient.fromConnectionString(conn, TABLE_NAME);
+    const id = context.bindingData.id;
+    const method = (req.method || "get").toUpperCase();
+
+    if (method === "GET") {
+      if (id) {
+        const entity = await client.getEntity("patient", String(id));
+        return (context.res = { status: 200, body: entity });
+      } else {
+        const results = [];
+        let count = 0;
+        for await (const e of client.listEntities({
+          queryOptions: { filter: odata`PartitionKey eq ${"patient"}` }
+        })) {
+          results.push(e);
+          if (++count >= 100) break;
         }
-        break;
-
-      case 'POST':
-        // Create new patient
-        const patientData = req.body;
-        const patientId = patientData.id || Date.now().toString();
-        
-        const newPatient = {
-          partitionKey: 'patient',
-          rowKey: patientId,
-          firstName: patientData.firstName,
-          lastName: patientData.lastName,
-          dateOfBirth: patientData.dateOfBirth,
-          medicalHistory: patientData.medicalHistory || '',
-          medications: patientData.medications || '',
-          phone: patientData.phone || '',
-          email: patientData.email || '',
-          createdAt: new Date().toISOString(),
-          createdBy: patientData.createdBy || 'system'
-        };
-        
-        await patientsTable.createEntity(newPatient);
-        context.res = { body: { success: true, patient: { ...newPatient, id: patientId } } };
-        break;
-
-      case 'PUT':
-        // Update patient
-        const updatePatient = req.body;
-        updatePatient.partitionKey = 'patient';
-        updatePatient.rowKey = updatePatient.id;
-        
-        await patientsTable.updateEntity(updatePatient, 'Merge');
-        context.res = { body: { success: true } };
-        break;
-
-      case 'DELETE':
-        // Delete patient
-        const patientId = req.query.patientId;
-        await patientsTable.deleteEntity('patient', patientId);
-        context.res = { body: { success: true } };
-        break;
-
-      default:
-        context.res = { status: 405, body: { error: "Method not allowed" } };
+        return (context.res = { status: 200, body: results });
+      }
     }
-  } catch (error) {
-    context.res = {
-      status: 500,
-      body: { error: error.message }
-    };
+
+    if (method === "POST") {
+      const payload = req.body || {};
+      if (!payload.id) return (context.res = { status: 400, body: { error: "id is required" } });
+      const entity = { partitionKey: "patient", rowKey: String(payload.id), ...payload };
+      await client.upsertEntity(entity, "Merge");
+      return (context.res = { status: 200, body: entity });
+    }
+
+    if (method === "PUT") {
+      if (!id) return (context.res = { status: 400, body: { error: "id path param required" } });
+      const entity = { partitionKey: "patient", rowKey: String(id), ...(req.body || {}) };
+      await client.upsertEntity(entity, "Merge");
+      return (context.res = { status: 200, body: entity });
+    }
+
+    if (method === "DELETE") {
+      if (!id) return (context.res = { status: 400, body: { error: "id path param required" } });
+      await client.deleteEntity("patient", String(id));
+      return (context.res = { status: 204, body: "" });
+    }
+
+    return (context.res = { status: 405, body: { error: "Method not allowed" } });
+  } catch (err) {
+    context.log.error("patients error", err);
+    return (context.res = { status: 500, body: { error: "Internal server error" } });
   }
 };
