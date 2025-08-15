@@ -1,101 +1,56 @@
-const { TableClient } = require("@azure/data-tables");
+const { TableClient, odata } = require("@azure/data-tables");
+const TABLE_NAME = "visits";
 
 module.exports = async function (context, req) {
-  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING || process.env.WEBSITE_CONTENTAZUREFILECONNECTIONSTRING;
-  
-  if (!connectionString) {
-    context.res = {
-      status: 500,
-      body: { error: "Storage connection not configured" }
-    };
-    return;
-  }
-
-  const visitsTable = TableClient.fromConnectionString(connectionString, "visits");
-
   try {
-    // Ensure table exists
-    await visitsTable.createTable().catch(e => {});
+    const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
+    if (!conn) return (context.res = { status: 500, body: { error: "Server config missing" } });
 
-    switch (req.method) {
-      case 'GET':
-        // Get visits for a patient
-        const patientId = req.query.patientId;
-        
-        if (!patientId) {
-          context.res = { status: 400, body: { error: "Patient ID required" } };
-          return;
+    const client = TableClient.fromConnectionString(conn, TABLE_NAME);
+    const id = context.bindingData.id;
+    const method = (req.method || "get").toUpperCase();
+
+    if (method === "GET") {
+      if (id) {
+        const entity = await client.getEntity("visit", String(id));
+        return (context.res = { status: 200, body: entity });
+      } else {
+        const results = [];
+        let count = 0;
+        for await (const e of client.listEntities({
+          queryOptions: { filter: odata`PartitionKey eq ${"visit"}` }
+        })) {
+          results.push(e);
+          if (++count >= 100) break;
         }
-        
-        const visits = [];
-        const entities = visitsTable.listEntities({
-          queryOptions: { filter: `PartitionKey eq '${patientId}'` }
-        });
-        
-        for await (const entity of entities) {
-          visits.push({
-            id: entity.rowKey,
-            patientId: entity.partitionKey,
-            date: entity.date,
-            time: entity.time,
-            transcript: entity.transcript,
-            notes: entity.notes,
-            noteType: entity.noteType,
-            timestamp: entity.timestamp,
-            createdBy: entity.createdBy,
-            createdByName: entity.createdByName
-          });
-        }
-        
-        context.res = { body: visits };
-        break;
-
-      case 'POST':
-        // Create new visit
-        const visitData = req.body;
-        const visitId = visitData.id || Date.now().toString();
-        
-        const newVisit = {
-          partitionKey: visitData.patientId,
-          rowKey: visitId,
-          date: visitData.date,
-          time: visitData.time,
-          transcript: visitData.transcript || '',
-          notes: visitData.notes || '',
-          noteType: visitData.noteType || 'progress',
-          timestamp: new Date().toISOString(),
-          createdBy: visitData.createdBy || 'system',
-          createdByName: visitData.createdByName || 'System'
-        };
-        
-        await visitsTable.createEntity(newVisit);
-        context.res = { body: { success: true, visit: { ...newVisit, id: visitId } } };
-        break;
-
-      case 'PUT':
-        // Update visit
-        const updateVisit = req.body;
-        updateVisit.partitionKey = updateVisit.patientId;
-        updateVisit.rowKey = updateVisit.id;
-        
-        await visitsTable.updateEntity(updateVisit, 'Merge');
-        context.res = { body: { success: true } };
-        break;
-
-      case 'DELETE':
-        // Delete visit
-        const { patientId: pId, visitId: vId } = req.query;
-        await visitsTable.deleteEntity(pId, vId);
-        context.res = { body: { success: true } };
-        break;
-
-      default:
-        context.res = { status: 405, body: { error: "Method not allowed" } };
+        return (context.res = { status: 200, body: results });
+      }
     }
-  } catch (error) {
-    context.res = {
-      status: 500,
-      body: { error: error.message }
-    };
+
+    if (method === "POST") {
+      const payload = req.body || {};
+      if (!payload.id) return (context.res = { status: 400, body: { error: "id is required" } });
+      const entity = { partitionKey: "visit", rowKey: String(payload.id), ...payload };
+      await client.upsertEntity(entity, "Merge");
+      return (context.res = { status: 200, body: entity });
+    }
+
+    if (method === "PUT") {
+      if (!id) return (context.res = { status: 400, body: { error: "id path param required" } });
+      const entity = { partitionKey: "visit", rowKey: String(id), ...(req.body || {}) };
+      await client.upsertEntity(entity, "Merge");
+      return (context.res = { status: 200, body: entity });
+    }
+
+    if (method === "DELETE") {
+      if (!id) return (context.res = { status: 400, body: { error: "id path param required" } });
+      await client.deleteEntity("visit", String(id));
+      return (context.res = { status: 204, body: "" });
+    }
+
+    return (context.res = { status: 405, body: { error: "Method not allowed" } });
+  } catch (err) {
+    context.log.error("visits error", err);
+    return (context.res = { status: 500, body: { error: "Internal server error" } });
   }
 };
