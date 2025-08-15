@@ -59,7 +59,9 @@ class AuthService {
     try {
       await this.ready;
       
-      const response = await fetch('/api/users', {
+      const apiUrl = process.env.REACT_APP_API_URL || 'https://aayuscribe-api-fthtanaubda4dveb.eastus2-01.azurewebsites.net/api';
+const response = await fetch(`${apiUrl}/users`, {
+  
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', username, password })
